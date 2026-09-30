@@ -34,7 +34,10 @@ CERTIFICATE_P12_BASE64="$(base64 -i "$work/cert.p12")" CERTIFICATE_PASSWORD=ci-t
   "$release/import-certificate.sh"
 identity="$(awk -F= '/^CODESIGN_IDENTITY=/{print $2}' "$work/env")"
 keychain="$(awk -F= '/^CODESIGN_KEYCHAIN=/{print $2}' "$work/env")"
-[ -n "$identity" ] && [ -n "$keychain" ] || { echo "导入脚本没有给出签名身份和钥匙串"; exit 1; }
+if [ -z "$identity" ] || [ -z "$keychain" ]; then
+  echo "导入脚本没有给出签名身份和钥匙串"
+  exit 1
+fi
 trap 'security delete-keychain "$keychain" 2>/dev/null || true' EXIT
 export CODESIGN_IDENTITY="$identity" CODESIGN_KEYCHAIN="$keychain"
 
@@ -54,7 +57,8 @@ fi
 echo "证书签名通过"
 
 step "2. 精简包"
-"$release/thin-archives.sh" "$app" "$work/dist/Sample" "$work/dist/Sample.entitlements"
+# 用相对路径调用，和发布流程里一样。
+(cd "$work" && "$release/thin-archives.sh" dist/Sample.app dist/Sample dist/Sample.entitlements)
 for arch in arm64 x86_64; do
   zip="$work/dist/Sample-$arch.zip"
   [ -f "$zip" ] || { echo "没有生成 $zip"; exit 1; }

@@ -51,9 +51,10 @@ for arch in arm64 x86_64; do
     "$here/sign.sh" "$dir/$app_name"
   fi
   codesign --verify --deep --strict "$dir/$app_name"
-  out="${prefix}-${arch}.zip"
+  # 先算出绝对路径，下面 cd 进临时文件夹以后相对路径就不对了。
+  out="$(cd "$(dirname "$prefix")" && pwd)/$(basename "$prefix")-${arch}.zip"
   rm -f "$out"
-  (cd "$dir" && ditto -c -k --keepParent "$app_name" "$(cd "$(dirname "$out")" && pwd)/$(basename "$out")")
+  (cd "$dir" && ditto -c -k --keepParent "$app_name" "$out")
   rm -rf "$dir"
-  echo "已生成 ${out}：$(du -h "$out" | cut -f1)"
+  echo "已生成 ${prefix}-${arch}.zip：$(du -h "$out" | cut -f1)"
 done
