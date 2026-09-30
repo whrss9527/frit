@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: FritCore 测试、脚本检查（Linux）
+    runs-on: ubuntu-latest
+    container: swift:6.0-noble
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: 单元测试
+        run: swift test
+      - name: changelog.sh 测试
+        run: Tests/release/test-changelog.sh
+
+  lint:
+    name: shellcheck、actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -x scripts/release/*.sh Tests/release/*.sh
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
+  macos:
+    name: 单元测试、发布脚本自测（macOS）
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: 选择最新的 Xcode
+        run: scripts/release/select-xcode.sh
+      - name: 单元测试
+        run: swift test
+      - name: 发布脚本自测
+        run: Tests/release/test-scripts.sh
+
+  release-dry-run:
+    name: 发布流程试运行
+    # 用示例 App 把可复用的发布工作流从头到尾走一遍（不打标签、不发布），确认 App 仓库调用时能用。
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-app.yml
+    with:
+      app-name: Sample
+      build-command: >-
+        Tests/release/make-sample-app.sh dist &&
+        "$FRIT_RELEASE/thin-archives.sh" dist/Sample.app dist/Sample-macos dist/Sample.entitlements &&
+        (cd dist && ditto -c -k --keepParent Sample.app Sample-macos.zip)
+      archives: dist/Sample-macos.zip dist/Sample-macos-arm64.zip dist/Sample-macos-x86_64.zip
+      test-command: ""
+      frit-ref: ${{ github.sha }}
+      dry-run: true
