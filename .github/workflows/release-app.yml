@@ -230,9 +230,9 @@ jobs:
             app="$(find "$work" -maxdepth 1 -name '*.app' -type d | head -1)"
             [ -n "$app" ] || { echo "::error::${archive} 的最外层没有 .app"; exit 1; }
             codesign --verify --deep --strict "$app"
-            version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
-            [ "$version" = "$VERSION" ] || { echo "::error::${archive} 里的版本号是 ${version}，应该是 ${VERSION}"; exit 1; }
-            echo "$(basename "$archive")：版本 ${version}，$(codesign -dvv "$app" 2>&1 | awk -F= '/^Authority=/{print $2; exit}' || true)"
+            app_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+            [ "$app_version" = "$VERSION" ] || { echo "::error::${archive} 里的版本号是 ${app_version}，应该是 ${VERSION}"; exit 1; }
+            echo "$(basename "$archive")：版本 ${app_version}，$(codesign -dvv "$app" 2>&1 | awk -F= '/^Authority=/{print $2; exit}' || true)"
             if [ -n "${CODESIGN_IDENTITY:-}" ]; then
               info="$(codesign -dvv "$app" 2>&1)"
               echo "$info" | grep -q "flags=.*runtime" || { echo "::error::${archive} 没有开 hardened runtime，公证不会通过"; exit 1; }
