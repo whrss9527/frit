@@ -71,6 +71,11 @@ on:
         required: false
         type: string
         default: main
+      require-notarization:
+        description: "必须用 Developer ID 签名并通过公证：没配证书或公证凭据、或者公证没通过时直接失败，不打标签也不发布"
+        required: false
+        type: boolean
+        default: false
       dry-run:
         description: "只打包、签名、公证，不打标签也不发布，把 zip 和校验和作为这次运行的附件上传（Frit 自己的 CI 用它测试整个流程）"
         required: false
@@ -259,6 +264,14 @@ jobs:
           # shellcheck disable=SC2086
           .frit/scripts/release/notarize.sh $ARCHIVES
           echo "NOTARIZED=1" >> "$GITHUB_ENV"
+      - name: 确认已公证
+        if: inputs.require-notarization
+        run: |
+          if [ "${NOTARIZED:-}" != "1" ]; then
+            echo "::error::这次调用要求 Developer ID 签名并通过公证（require-notarization），但没有做到：检查仓库 Secrets 里的 MACOS_CERTIFICATE_P12、MACOS_CERTIFICATE_PASSWORD 和公证凭据（见 Frit 的 docs/release.md）。没有打标签，也没有发布。"
+            exit 1
+          fi
+          echo "已签名并通过公证"
       - name: 校验和
         run: |
           names=""

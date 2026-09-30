@@ -58,7 +58,7 @@ jobs:
 | `CODESIGN_IDENTITY`、`CODESIGN_KEYCHAIN` | 配了证书时有值，签名用；没有时 ad-hoc 签名 |
 | `FRIT_RELEASE` | Frit 发布脚本所在的目录，可以直接调用 `"$FRIT_RELEASE/sign.sh"`、`"$FRIT_RELEASE/thin-archives.sh"` |
 
-其他参数（测试命令、发布说明、测试版、重新打包已有版本、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
+其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
 
 ### 脚本
 
