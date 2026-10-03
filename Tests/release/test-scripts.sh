@@ -2,7 +2,7 @@
 # 发布脚本在 macOS 上的自测（Frit 的 CI 里跑）：
 #   1. 用临时的自签名证书走一遍导入钥匙串、由内向外签名、hardened runtime、安全时间戳；
 #   2. 精简包：两种芯片各一个，里面的程序只剩一种芯片，签名有效；
-#   3. 公证脚本：用假的 xcrun 走一遍通过、没通过、没有凭据三种情况；
+#   3. 公证脚本：用假的 xcrun 走一遍通过、没通过、等超时、没有凭据，以及钉票据后系统检查的重试和兜底；
 #   4. 假发布：latest.json 能访问，下载的包校验和对得上，里面是 9.9.9。
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -89,7 +89,22 @@ case "$1 $2" in
   *) echo "fake xcrun: unexpected $*" >&2; exit 1 ;;
 esac
 SH
-printf '#!/bin/bash\necho "$*: accepted"\n' > "$fake/spctl"
+# 假的 spctl：FAKE_SPCTL=accept（默认）、flaky（前 FAKE_SPCTL_FAILS 次说没公证，之后通过）、
+# unnotarized（一直说没公证）、rejected（签名有问题）。调用次数记在 $FAKE_SPCTL_COUNT。
+cat > "$fake/spctl" <<'SH'
+#!/bin/bash
+count_file="${FAKE_SPCTL_COUNT:-/dev/null}"
+n="$(cat "$count_file" 2>/dev/null || echo 0)"
+n=$((n + 1))
+[ "$count_file" = /dev/null ] || echo "$n" > "$count_file"
+for app in "$@"; do :; done
+case "${FAKE_SPCTL:-accept}" in
+  flaky) [ "$n" -gt "${FAKE_SPCTL_FAILS:-2}" ] || { printf '%s: rejected\nsource=Unnotarized Developer ID\n' "$app" >&2; exit 3; } ;;
+  unnotarized) printf '%s: rejected\nsource=Unnotarized Developer ID\n' "$app" >&2; exit 3 ;;
+  rejected) printf '%s: rejected\nsource=no usable signature\n' "$app" >&2; exit 3 ;;
+esac
+echo "$app: accepted"
+SH
 chmod +x "$fake/xcrun" "$fake/spctl"
 cp "$work/dist/Sample.zip" "$work/test.zip"
 PATH="$fake:$PATH" NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 "$release/notarize.sh" "$work/test.zip"
@@ -102,6 +117,19 @@ if PATH="$fake:$PATH" FAKE_NOTARY_STATUS=Invalid NOTARY_APPLE_ID=ci@example.com 
   cat "$work/invalid.log"; echo "公证没通过时脚本应该失败"; exit 1
 fi
 grep -q "fake notary issue" "$work/invalid.log" || { cat "$work/invalid.log"; echo "公证没通过时没有打印苹果的日志"; exit 1; }
+notarize() { PATH="$fake:$PATH" NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 SPCTL_TRIES=3 SPCTL_INTERVAL=0 "$release/notarize.sh" "$work/test.zip"; }
+if FAKE_NOTARY_STATUS="In Progress" notarize > "$work/timeout.log" 2>&1; then
+  cat "$work/timeout.log"; echo "等公证超时时脚本应该失败"; exit 1
+fi
+grep -q "还没处理完" "$work/timeout.log" || { cat "$work/timeout.log"; echo "等公证超时时应该说明"; exit 1; }
+echo 0 > "$work/spctl-count"
+FAKE_SPCTL=flaky FAKE_SPCTL_COUNT="$work/spctl-count" notarize > "$work/flaky.log" 2>&1 || { cat "$work/flaky.log"; echo "系统检查前两次没通过、第三次通过时应该成功"; exit 1; }
+[ "$(cat "$work/spctl-count")" = 3 ] || { cat "$work/flaky.log"; echo "系统检查应该试了 3 次"; exit 1; }
+FAKE_SPCTL=unnotarized notarize > "$work/unnotarized.log" 2>&1 || { cat "$work/unnotarized.log"; echo "已公证、只有系统检查说没公证时应该照常发布"; exit 1; }
+grep -q "::warning::" "$work/unnotarized.log" || { cat "$work/unnotarized.log"; echo "这种情况要记一条警告"; exit 1; }
+if FAKE_SPCTL=rejected notarize > "$work/rejected.log" 2>&1; then
+  cat "$work/rejected.log"; echo "系统检查因为签名问题没通过时应该失败"; exit 1
+fi
 if "$release/notarize.sh" "$work/test.zip" > "$work/nocreds.log" 2>&1; then
   cat "$work/nocreds.log"; echo "没有公证凭据时脚本应该失败"; exit 1
 fi
@@ -112,6 +140,7 @@ for command in submit wait; do
     echo "$help" | grep -qE -- "${option}( |,|\$)" || { echo "$help"; echo "notarytool ${command} 没有 ${option} 参数"; exit 1; }
   done
 done
+xcrun notarytool wait --help 2>&1 | grep -qE -- "--timeout( |,|\$)" || { echo "notarytool wait 没有 --timeout 参数"; exit 1; }
 xcrun notarytool log --help >/dev/null
 xcrun --find stapler >/dev/null
 echo "公证脚本通过"
