@@ -1,9 +1,10 @@
 name: ci
 
+# 每次推送（任何分支）跑一遍。不用 pull_request 触发：合并请求显示的就是它分支上这次推送的结果，
+# 两个都开的话同一个提交要跑两遍，macOS runner 排队的时间也翻倍。
 on:
   push:
     branches: ["**"]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
