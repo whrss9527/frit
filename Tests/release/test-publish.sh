@@ -86,7 +86,10 @@ remote_tag() { git ls-remote origin "refs/tags/$1" | awk '{ print $1 }'; }
 
 # 1. 没有标签：在当前提交上发布
 plan
-[ "$(output tag)" = v1.0.0 ] && [ "$(output sha)" = "$B" ] || { cat "$work/log"; fail "没有标签时应该在当前提交上发布 v1.0.0"; }
+if [ "$(output tag)" != v1.0.0 ] || [ "$(output sha)" != "$B" ]; then
+  cat "$work/log"
+  fail "没有标签时应该在当前提交上发布 v1.0.0"
+fi
 pass "没有标签时发布当前提交"
 
 # 2. 连续推送两次：两次运行都定了要发，A 先发完，B 拿到锁后不能把自己的包传到 A 的标签下
@@ -111,9 +114,14 @@ pass "已经发完时不发"
 git push -q origin :refs/tags/v1.0.0 2>/dev/null
 reset_gh
 if FAKE_GH_UPLOAD_FAIL=1 publish "$A"; then fail "上传失败时 publish.sh 应该失败"; fi
-[ "$(remote_tag v1.0.0)" = "$A" ] && [ "$(cat "$FAKE_GH/state")" = draft ] || fail "应该留下标签和草稿"
+if [ "$(remote_tag v1.0.0)" != "$A" ] || [ "$(cat "$FAKE_GH/state")" != draft ]; then
+  fail "应该留下标签和草稿"
+fi
 plan
-[ "$(output tag)" = v1.0.0 ] && [ "$(output sha)" = "$A" ] || { cat "$work/log"; fail "草稿没发完时应该在标签指向的 A 上接着发"; }
+if [ "$(output tag)" != v1.0.0 ] || [ "$(output sha)" != "$A" ]; then
+  cat "$work/log"
+  fail "草稿没发完时应该在标签指向的 A 上接着发"
+fi
 publish "$A" || { cat "$work/log"; fail "接着发布"; }
 if ! { [ "$(cat "$FAKE_GH/state")" = published ] && grep -qxF App.zip "$FAKE_GH/assets" && grep -qxF SHA256SUMS.txt "$FAKE_GH/assets"; }; then
   fail "接着发布后应该公开并且附件齐全"
