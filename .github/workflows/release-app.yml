@@ -13,12 +13,14 @@ name: release-app
 #       secrets: inherit
 #
 # 流程：
-#   1. 定版本：没填 tag 时取 CHANGELOG.md 最上面的版本；这个版本已经有标签就不发（除非 overwrite）。
+#   1. 定版本：没填 tag 时取 CHANGELOG.md 最上面的版本；这个版本已经发过就不发（除非 overwrite）。
+#      标签打了、但上次没发完（Release 还是草稿或者缺附件）时，在标签指向的提交上接着发。
 #   2. 在 macOS 上跑测试、导入 Developer ID 证书（Secrets 里有时）、执行 build-command 打包。
 #      build-command 能用到的环境变量：VERSION、BUILD_NUMBER、CODESIGN_IDENTITY、CODESIGN_KEYCHAIN、FRIT_RELEASE（Frit 发布脚本所在的目录）。
 #      它要把 archives 列出的 zip 都生成好，每个 zip 最外层是一个签好名的 .app。
 #   3. 有证书和公证凭据时提交苹果公证并钉上票据；生成 SHA256SUMS.txt。
 #   4. 发布说明取 CHANGELOG.md 里这个版本的一节（或者 notes-command 的输出），先建草稿 Release，附件传完再公开。
+#      发布前再核对一次标签：连续推送时另一次运行已经把这个版本发在别的提交上，就不上传这次的包。
 # Secrets 怎么配见 Frit 的 docs/release.md；没配证书时照旧 ad-hoc 签名，日志里有警告。
 
 on:
@@ -131,35 +133,12 @@ jobs:
         id: plan
         env:
           TAG: ${{ inputs.tag }}
+          ARCHIVES: ${{ inputs.archives }}
           OVERWRITE: ${{ inputs.overwrite }}
           DRY_RUN: ${{ inputs.dry-run }}
-        run: |
-          if [ -z "$TAG" ]; then
-            version="$(.frit/scripts/release/changelog.sh version CHANGELOG.md)"
-            TAG="v${version}"
-          fi
-          if ! [[ "$TAG" =~ ^v[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "::error::标签格式应该是 v主版本.次版本.修订号，比如 v0.46.0（现在是 ${TAG}）"
-            exit 1
-          fi
-          sha="$(git rev-parse HEAD)"
-          if [ "$DRY_RUN" = "true" ]; then
-            echo "试运行 ${TAG}，提交 ${sha}（不打标签、不发布）"
-          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            if [ "$OVERWRITE" != "true" ]; then
-              echo "${TAG} 已经发布过，这次不发版。要发版就在 CHANGELOG.md 最上面加一节新版本。"
-              exit 0
-            fi
-            git fetch --depth=1 origin "refs/tags/${TAG}:refs/tags/${TAG}"
-            sha="$(git rev-parse "${TAG}^{commit}")"
-            echo "${TAG} 已存在，在它指向的提交 ${sha} 上重新打包"
-          else
-            echo "发布 ${TAG}，提交 ${sha}"
-          fi
-          {
-            echo "tag=${TAG}"
-            echo "sha=${sha}"
-          } >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: .frit/scripts/release/plan.sh
 
   release:
     name: 打包并发布
@@ -172,7 +151,8 @@ jobs:
       group: frit-release-${{ github.repository }}
       cancel-in-progress: false
     outputs:
-      tag: ${{ needs.plan.outputs.tag }}
+      # 只有真的发布了才有值（试运行、另一次运行先发了时为空）。
+      tag: ${{ steps.publish.outputs.tag }}
     env:
       TAG: ${{ needs.plan.outputs.tag }}
       APP_NAME: ${{ inputs.app-name }}
@@ -308,41 +288,14 @@ jobs:
             ${{ env.ARCHIVE_DIR }}/SHA256SUMS.txt
             ${{ env.NOTES_FILE }}
       - name: 发布
+        id: publish
         if: ${{ !inputs.dry-run }}
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           SHA: ${{ needs.plan.outputs.sha }}
           PRERELEASE: ${{ inputs.prerelease }}
-        run: |
-          if ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            git tag "$TAG" "$SHA"
-            git push origin "refs/tags/${TAG}"
-          fi
-          flags=()
-          if [ "$PRERELEASE" = "true" ]; then
-            flags+=(--prerelease)
-          fi
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --draft --verify-tag --title "${APP_NAME} ${TAG}" --notes-file "$NOTES_FILE" "${flags[@]}"
-          else
-            gh release edit "$TAG" --notes-file "$NOTES_FILE"
-          fi
-          files=()
-          for archive in $ARCHIVES; do
-            files+=("$archive")
-          done
-          files+=("${ARCHIVE_DIR}/SHA256SUMS.txt")
-          gh release upload "$TAG" "${files[@]}" --clobber
-          if [ "$PRERELEASE" = "true" ]; then
-            gh release edit "$TAG" --draft=false --prerelease
-          else
-            gh release edit "$TAG" --draft=false --latest
-          fi
-          echo "已发布到 https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
-          {
-            echo "### ${APP_NAME} ${TAG} 已发布"
-            echo "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: .frit/scripts/release/publish.sh
       - name: 删除临时钥匙串
         if: always() && env.CODESIGN_KEYCHAIN != ''
         run: security delete-keychain "$CODESIGN_KEYCHAIN" || true

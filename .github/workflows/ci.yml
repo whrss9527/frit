@@ -22,6 +22,8 @@ jobs:
         run: swift test
       - name: changelog.sh 测试
         run: Tests/release/test-changelog.sh
+      - name: plan.sh、publish.sh 测试
+        run: Tests/release/test-publish.sh
 
   lint:
     name: shellcheck、actionlint
@@ -48,6 +50,8 @@ jobs:
         run: swift test
       - name: 发布脚本自测
         run: Tests/release/test-scripts.sh
+      - name: plan.sh、publish.sh 测试（macOS 自带的 bash 3.2）
+        run: Tests/release/test-publish.sh
 
   release-dry-run:
     name: 发布流程试运行
