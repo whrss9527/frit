@@ -32,6 +32,7 @@ CNF
 : > "$work/env"
 CERTIFICATE_P12_BASE64="$(base64 -i "$work/cert.p12")" CERTIFICATE_PASSWORD=ci-test GITHUB_ENV="$work/env" \
   "$release/import-certificate.sh"
+grep -q '^CODESIGN_NAME=Frit CI Test$' "$work/env" || { echo "缺少证书名称"; exit 1; }
 identity="$(awk -F= '/^CODESIGN_IDENTITY=/{print $2}' "$work/env")"
 keychain="$(awk -F= '/^CODESIGN_KEYCHAIN=/{print $2}' "$work/env")"
 if [ -z "$identity" ] || [ -z "$keychain" ]; then
