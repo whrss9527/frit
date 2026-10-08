@@ -19,6 +19,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - name: 安装附件测试依赖
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3
       - name: 单元测试
         run: swift test
       - name: 附件清单测试
