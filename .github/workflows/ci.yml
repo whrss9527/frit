@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@v5
       - name: 单元测试
         run: swift test
+      - name: 附件清单测试
+        run: python3 -m unittest discover -s Tests/release -p 'test_assets.py'
       - name: changelog.sh 测试
         run: Tests/release/test-changelog.sh
 
@@ -47,6 +49,8 @@ jobs:
         run: scripts/release/select-xcode.sh
       - name: 单元测试
         run: swift test
+      - name: 附件清单测试
+        run: python3 -m unittest discover -s Tests/release -p 'test_assets.py'
       - name: 发布脚本自测
         run: Tests/release/test-scripts.sh
 
@@ -61,8 +65,11 @@ jobs:
       build-command: >-
         Tests/release/make-sample-app.sh dist &&
         "$FRIT_RELEASE/thin-archives.sh" dist/Sample.app dist/Sample-macos dist/Sample.entitlements &&
-        (cd dist && ditto -c -k --keepParent Sample.app Sample-macos.zip)
+        (cd dist && ditto -c -k --keepParent Sample.app Sample-macos.zip) &&
+        printf '{"plugins":[]}\n' > dist/plugins.json
       archives: dist/Sample-macos.zip dist/Sample-macos-arm64.zip dist/Sample-macos-x86_64.zip
+      extra-assets: dist/plugins.json
+      asset-aliases: dist/Sample-macos.zip=dist/LegacySample-macos.zip
       test-command: ""
       frit-ref: ${{ github.sha }}
       dry-run: true

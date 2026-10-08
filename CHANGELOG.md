@@ -4,6 +4,8 @@ Frit 的版本号和发布说明。App 仓库在 `uses:` 里写的 `@` 后面可
 
 ## 0.1.0
 
+- 发布流程支持额外附件、归档别名和资产 SHA-256 清单输出；导入证书后导出 `CODESIGN_NAME`。
+
 - `require-notarization`：要求 Developer ID 签名并通过公证，做不到时直接失败，不打标签也不发布，避免把没签名的包当成签名版发出去。
 
 - 可复用的发布工作流 `release-app.yml`：从 CHANGELOG.md 定版本，打包、签名、公证、钉票据，生成 SHA256SUMS.txt，先建草稿再公开。
