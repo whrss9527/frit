@@ -12,6 +12,10 @@
 set -euo pipefail
 
 [ $# -gt 0 ] || { echo "用法：notarize.sh 文件.zip …"; exit 1; }
+tries="${SPCTL_TRIES:-6}"
+interval="${SPCTL_INTERVAL:-10}"
+[[ "$tries" =~ ^[1-9][0-9]*$ ]] || { echo "SPCTL_TRIES 必须是正整数"; exit 1; }
+[[ "$interval" =~ ^(0|[1-9][0-9]*)$ ]] || { echo "SPCTL_INTERVAL 必须是非负整数秒数"; exit 1; }
 work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/frit-notary"
 rm -rf "$work" && mkdir -p "$work"
 trap 'rm -f "$work/AuthKey.p8"' EXIT
@@ -67,11 +71,15 @@ for zip in "$@"; do
   name="$(basename "$zip")"
   out="$work/wait-$name.json"
   timeout="${NOTARY_TIMEOUT:-45m}"
-  xcrun notarytool wait "$id" "${auth[@]}" --timeout "$timeout" --output-format json > "$out" || true
+  wait_result=0
+  xcrun notarytool wait "$id" "${auth[@]}" --timeout "$timeout" --output-format json > "$out" || wait_result=$?
   status="$(json_field "$out" status)"
   echo "${name}：公证结果 ${status:-未知}"
-  if [ "$status" != "Accepted" ]; then
+  if [ "$wait_result" != 0 ] || [ "$status" != "Accepted" ]; then
     cat "$out" || true
+    if [ "$wait_result" != 0 ]; then
+      echo "等待公证失败（退出状态 ${wait_result}），这次不发布"
+    fi
     if [ -z "$status" ] || [ "$status" = "In Progress" ]; then
       echo "等了 ${timeout} 苹果还没处理完（或者没拿到结果），这次不发布。可以稍后重新运行，或者用 xcrun notarytool info ${id} 查进度"
     fi
@@ -92,15 +100,16 @@ for zip in "$@"; do
   xcrun stapler validate "$app"
   # 刚钉上票据时系统可能还认不出来，隔几秒多试几次。
   assessed=0
-  tries="${SPCTL_TRIES:-6}"
-  interval="${SPCTL_INTERVAL:-10}"
   for attempt in $(seq 1 "$tries"); do
     if spctl --assess --type execute --verbose=2 "$app"; then
       assessed=1
       break
     fi
-    echo "  第 ${attempt} 次检查没通过，${interval} 秒后再试"
-    sleep "$interval"
+    echo "  第 ${attempt} 次检查没通过"
+    if [ "$attempt" -lt "$tries" ]; then
+      echo "  ${interval} 秒后再试"
+      sleep "$interval"
+    fi
   done
   if [ "$assessed" != 1 ]; then
     echo "===== 系统检查没通过，详细信息 ====="

@@ -2,7 +2,7 @@
 # 把 Developer ID Application 证书（.p12，base64 编码）导入一个临时钥匙串，给 codesign 用。发布流程里调用：
 #   CERTIFICATE_P12_BASE64=… CERTIFICATE_PASSWORD=… scripts/release/import-certificate.sh
 # 找到的签名身份（证书的 SHA-1）和钥匙串路径写进 $GITHUB_ENV（没有时打印出来）：
-#   CODESIGN_IDENTITY、CODESIGN_KEYCHAIN —— scripts/release/sign.sh 和各 App 的打包脚本会用它们签名。
+#   CODESIGN_IDENTITY、CODESIGN_KEYCHAIN、CODESIGN_NAME —— scripts/release/sign.sh 和各 App 的打包脚本会用它们签名。
 # 用完可以 security delete-keychain "$CODESIGN_KEYCHAIN"。
 set -euo pipefail
 
@@ -58,10 +58,12 @@ esac
 
 if [ -n "${GITHUB_ENV:-}" ]; then
   {
+    echo "CODESIGN_NAME=$name"
     echo "CODESIGN_IDENTITY=$identity"
     echo "CODESIGN_KEYCHAIN=$keychain"
   } >> "$GITHUB_ENV"
 else
+  echo "CODESIGN_NAME=$name"
   echo "CODESIGN_IDENTITY=$identity"
   echo "CODESIGN_KEYCHAIN=$keychain"
 fi

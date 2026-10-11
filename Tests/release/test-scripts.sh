@@ -32,6 +32,7 @@ CNF
 : > "$work/env"
 CERTIFICATE_P12_BASE64="$(base64 -i "$work/cert.p12")" CERTIFICATE_PASSWORD=ci-test GITHUB_ENV="$work/env" \
   "$release/import-certificate.sh"
+grep -q '^CODESIGN_NAME=Frit CI Test$' "$work/env" || { echo "缺少证书名称"; exit 1; }
 identity="$(awk -F= '/^CODESIGN_IDENTITY=/{print $2}' "$work/env")"
 keychain="$(awk -F= '/^CODESIGN_KEYCHAIN=/{print $2}' "$work/env")"
 if [ -z "$identity" ] || [ -z "$keychain" ]; then
@@ -83,7 +84,7 @@ cat > "$fake/xcrun" <<'SH'
 #!/bin/bash
 case "$1 $2" in
   "notarytool submit") echo '{"id":"00000000-0000-4000-8000-000000000000","message":"Successfully uploaded file"}' ;;
-  "notarytool wait") echo "{\"id\":\"$3\",\"status\":\"${FAKE_NOTARY_STATUS:-Accepted}\",\"message\":\"Processing complete\"}" ;;
+  "notarytool wait") echo "{\"id\":\"$3\",\"status\":\"${FAKE_NOTARY_STATUS:-Accepted}\",\"message\":\"Processing complete\"}"; exit "${FAKE_NOTARY_WAIT_EXIT:-0}" ;;
   "notarytool log") echo '{"issues":[{"message":"fake notary issue"}]}' ;;
   "stapler staple"|"stapler validate") echo "The $2 action worked!" ;;
   *) echo "fake xcrun: unexpected $*" >&2; exit 1 ;;
@@ -118,10 +119,14 @@ if PATH="$fake:$PATH" FAKE_NOTARY_STATUS=Invalid NOTARY_APPLE_ID=ci@example.com 
 fi
 grep -q "fake notary issue" "$work/invalid.log" || { cat "$work/invalid.log"; echo "公证没通过时没有打印苹果的日志"; exit 1; }
 notarize() { PATH="$fake:$PATH" NOTARY_APPLE_ID=ci@example.com NOTARY_PASSWORD=x NOTARY_TEAM_ID=ABCDE12345 SPCTL_TRIES=3 SPCTL_INTERVAL=0 "$release/notarize.sh" "$work/test.zip"; }
-if FAKE_NOTARY_STATUS="In Progress" notarize > "$work/timeout.log" 2>&1; then
+if FAKE_NOTARY_STATUS="In Progress" FAKE_NOTARY_WAIT_EXIT=75 notarize > "$work/timeout.log" 2>&1; then
   cat "$work/timeout.log"; echo "等公证超时时脚本应该失败"; exit 1
 fi
 grep -q "还没处理完" "$work/timeout.log" || { cat "$work/timeout.log"; echo "等公证超时时应该说明"; exit 1; }
+if FAKE_NOTARY_WAIT_EXIT=1 notarize > "$work/wait-error.log" 2>&1; then
+  cat "$work/wait-error.log"; echo "wait 报错时不能因为 JSON 里写着 Accepted 就继续"; exit 1
+fi
+grep -q "等待公证失败" "$work/wait-error.log" || { cat "$work/wait-error.log"; echo "没有说明 wait 失败"; exit 1; }
 echo 0 > "$work/spctl-count"
 FAKE_SPCTL=flaky FAKE_SPCTL_COUNT="$work/spctl-count" notarize > "$work/flaky.log" 2>&1 || { cat "$work/flaky.log"; echo "系统检查前两次没通过、第三次通过时应该成功"; exit 1; }
 [ "$(cat "$work/spctl-count")" = 3 ] || { cat "$work/flaky.log"; echo "系统检查应该试了 3 次"; exit 1; }

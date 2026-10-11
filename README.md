@@ -55,10 +55,21 @@ jobs:
 | --- | --- |
 | `VERSION` | 版本号，比如 `0.46.0`（不带 v） |
 | `BUILD_NUMBER` | 提交数，可以用作 `CFBundleVersion` |
-| `CODESIGN_IDENTITY`、`CODESIGN_KEYCHAIN` | 配了证书时有值，签名用；没有时 ad-hoc 签名 |
+| `CODESIGN_IDENTITY`、`CODESIGN_KEYCHAIN`、`CODESIGN_NAME` | 配了证书时有值，签名用；没有时 ad-hoc 签名 |
 | `FRIT_RELEASE` | Frit 发布脚本所在的目录，可以直接调用 `"$FRIT_RELEASE/sign.sh"`、`"$FRIT_RELEASE/thin-archives.sh"` |
 
 其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
+
+### 额外附件和归档别名
+
+```yaml
+extra-assets: dist/plugins-0.1.0.json dist/Plugins.zip
+asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
+```
+
+所有附件放在 `archives` 的同一个目录，路径用空格分隔，不支持文件名中的空格或特殊字符。额外附件只上传、计算校验和，不由 Frit 检查 `.app` 或公证；插件包仍需由调用方按自己的流程签名、公证。别名来源必须在 `archives` 里，目标必须是尚不存在的 zip；在苹果公证、钉票据并重新打包后才复制，因此别名与最终归档逐字节相同。
+
+工作流输出 `assets` 是 JSON 数组，例如 `[{"name":"Proxi-macos.zip","sha256":"…"}]`，包含归档、额外附件、别名，不包含校验和文件本身。试运行也输出它，并上传上述附件、`SHA256SUMS.txt` 和 `release-assets.json`。未进行构建时输出为空。
 
 ### 脚本
 
@@ -70,6 +81,7 @@ jobs:
 | `import-certificate.sh` | 把 base64 的 .p12 导入临时钥匙串，给出签名身份 |
 | `notarize.sh` | 提交公证、等结果、钉票据、重新打包；没通过时打印苹果的日志 |
 | `thin-archives.sh` | 从通用二进制的 .app 打出 arm64、x86_64 两个精简包，重新签名 |
+| `assets.sh` | 公证后复制别名，生成附件清单和校验和 |
 | `changelog.sh` | 读 CHANGELOG.md 最上面的版本、取某个版本的一节 |
 | `fake-release.sh` | 更新端到端测试用：把 .app 改成 9.9.9，用本地 HTTP 服务器提供 GitHub 格式的 latest.json 和安装包 |
 | `select-xcode.sh` | 在 GitHub 的 macOS runner 上切到最新的正式版 Xcode |
@@ -79,6 +91,7 @@ jobs:
 ```bash
 swift test                          # FritCore 单元测试（macOS 和 Linux）
 Tests/release/test-changelog.sh     # changelog.sh 测试（macOS 和 Linux）
+Tests/release/test-notarize.sh      # 公证超时与重试逻辑（替身命令，macOS 和 Linux）
 Tests/release/test-scripts.sh       # 发布脚本自测（macOS）：临时证书签名、精简包、假 xcrun 公证、假发布
 ```
 
