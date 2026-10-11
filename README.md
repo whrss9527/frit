@@ -86,7 +86,7 @@ jobs:
 
 ### 发版前验证更新
 
-调用方可设置 `update-e2e-command: scripts/update-e2e.sh`。命令在签名、公证、附件校验和完成后执行，可读取 `ARCHIVE_DIR`、`VERSION`、`SHA256SUMS_FILE` 和 `FRIT_RELEASE`；返回非零状态就停止，尚未打标签或发布。`dry-run` 同样执行这个命令。旧版下载、实际 App 启动与更新验证由调用方提供，接口约定见 [docs/release.md](docs/release.md)。
+0.3.0 起，调用方可设置 `update-e2e-command: scripts/update-e2e.sh`。命令在签名、公证、附件校验和完成后执行，可读取 `ARCHIVE_DIR`、`VERSION`、`SHA256SUMS_FILE` 和 `FRIT_RELEASE`；返回非零状态就停止，尚未打标签或发布。`dry-run` 同样执行这个命令。旧版下载、实际 App 启动与更新验证由调用方提供，接口约定见 [docs/release.md](docs/release.md)。
 
 ### 额外附件和归档别名
 
