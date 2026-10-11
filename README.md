@@ -84,6 +84,10 @@ jobs:
 
 正式版发布前会比较仓库中全部已公开的正式版。只有更高的版本（或重新打包当前最高版本的原标签）才会标为 `latest`；重打包旧版会显式设置 `latest=false`。预发布和草稿不参与比较。正式版标签无法解析或 GitHub 列表读取失败时停止发布，避免错误地改变更新入口。
 
+### 发版前验证更新
+
+0.3.0 起，调用方可设置 `update-e2e-command: scripts/update-e2e.sh`。命令在签名、公证、附件校验和完成后执行，可读取 `ARCHIVE_DIR`、`VERSION`、`SHA256SUMS_FILE` 和 `FRIT_RELEASE`；返回非零状态就停止，尚未打标签或发布。`dry-run` 同样执行这个命令。旧版下载、实际 App 启动与更新验证由调用方提供，接口约定见 [docs/release.md](docs/release.md)。
+
 ### 额外附件和归档别名
 
 ```yaml
@@ -119,6 +123,7 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 swift test                          # FritCore 单元测试（macOS 和 Linux）
 python3 -m unittest discover -s Tests/release -p 'test_*.py' # 发布逻辑和附件清单测试
 Tests/release/test-changelog.sh     # changelog.sh 测试（macOS 和 Linux）
+Tests/release/test-update-e2e.sh    # 更新验证入口、失败传播和工作流顺序（macOS 和 Linux）
 Tests/release/test-notarize.sh      # 公证超时与重试逻辑（替身命令，macOS 和 Linux）
 Tests/release/test-publish.sh       # 发布竞态、失败恢复与附件完整性（macOS 和 Linux）
 Tests/release/test-scripts.sh       # 发布脚本自测（macOS）：临时证书签名、精简包、假 xcrun 公证、假发布
