@@ -97,6 +97,7 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 swift test                          # FritCore 单元测试（macOS 和 Linux）
 python3 -m unittest discover -s Tests/release -p 'test_*.py' # 发布逻辑和附件清单测试
 Tests/release/test-changelog.sh     # changelog.sh 测试（macOS 和 Linux）
+Tests/release/test-notarize.sh      # 公证超时与重试逻辑（替身命令，macOS 和 Linux）
 Tests/release/test-publish.sh       # 发布竞态、失败恢复与附件完整性（macOS 和 Linux）
 Tests/release/test-scripts.sh       # 发布脚本自测（macOS）：临时证书签名、精简包、假 xcrun 公证、假发布
 ```
