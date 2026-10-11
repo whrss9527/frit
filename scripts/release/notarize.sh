@@ -10,6 +10,7 @@
 #   NOTARY_TIMEOUT  最多等苹果处理多久，格式同 notarytool 的 --timeout（30m、1h），默认 45m（发布 job 最长 60 分钟）
 #   SPCTL_TRIES、SPCTL_INTERVAL  钉上票据后系统检查最多试几次、隔几秒，默认 6 次、10 秒（自测时调小）
 set -euo pipefail
+umask 077
 
 [ $# -gt 0 ] || { echo "用法：notarize.sh 文件.zip …"; exit 1; }
 tries="${SPCTL_TRIES:-6}"
@@ -18,7 +19,14 @@ interval="${SPCTL_INTERVAL:-10}"
 [[ "$interval" =~ ^(0|[1-9][0-9]*)$ ]] || { echo "SPCTL_INTERVAL 必须是非负整数秒数"; exit 1; }
 work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/frit-notary"
 rm -rf "$work" && mkdir -p "$work"
-trap 'rm -f "$work/AuthKey.p8"' EXIT
+notary_keychain=""
+cleanup() {
+  rm -f "$work/AuthKey.p8"
+  if [ -n "$notary_keychain" ]; then
+    security delete-keychain "$notary_keychain" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 
 auth=()
 if [ -n "${NOTARY_KEY_P8:-}" ]; then
@@ -33,9 +41,17 @@ if [ -n "${NOTARY_KEY_P8:-}" ]; then
     auth+=(--issuer "$NOTARY_ISSUER_ID")
   fi
 elif [ -n "${NOTARY_APPLE_ID:-}" ]; then
-  auth=(--apple-id "$NOTARY_APPLE_ID"
-        --password "${NOTARY_PASSWORD:?没有设置 NOTARY_PASSWORD（App 专用密码）}"
-        --team-id "${NOTARY_TEAM_ID:?没有设置 NOTARY_TEAM_ID}")
+  : "${NOTARY_PASSWORD:?没有设置 NOTARY_PASSWORD（App 专用密码）}"
+  : "${NOTARY_TEAM_ID:?没有设置 NOTARY_TEAM_ID}"
+  notary_keychain="$work/notary.keychain-db"
+  keychain_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+  security create-keychain -p "$keychain_password" "$notary_keychain"
+  security unlock-keychain -p "$keychain_password" "$notary_keychain"
+  unset keychain_password
+  # 省略 --password 让 notarytool 从标准输入读取；后续命令只携带临时钥匙串 profile。
+  printf '%s\n' "$NOTARY_PASSWORD" | xcrun notarytool store-credentials frit-notary \
+    --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --keychain "$notary_keychain"
+  auth=(--keychain-profile frit-notary --keychain "$notary_keychain")
 else
   echo "没有公证凭据：设置 NOTARY_KEY_P8 + NOTARY_KEY_ID（+ NOTARY_ISSUER_ID），或者 NOTARY_APPLE_ID + NOTARY_PASSWORD + NOTARY_TEAM_ID"
   exit 1
