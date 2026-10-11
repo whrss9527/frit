@@ -346,7 +346,11 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then
             gh release edit "$TAG" --draft=false --prerelease
           else
-            gh release edit "$TAG" --draft=false --latest
+            # 重新打包旧版只更新它自己的附件，不能把 latest 更新入口指回旧版。
+            # 发布前读取全部分页；API 或版本解析失败时停止，不猜测 latest。
+            gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "$RUNNER_TEMP/published-releases.json"
+            latest=$(python3 "$FRIT_RELEASE/latest.py" "$TAG" < "$RUNNER_TEMP/published-releases.json")
+            gh release edit "$TAG" --draft=false --prerelease=false --latest="$latest"
           fi
           echo "已发布到 https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
           {
