@@ -174,9 +174,9 @@ jobs:
     if: needs.plan.outputs.tag != ''
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 60
-    # 同一个 App 同一时间只发一个版本。
+    # 正式发布按 App 串行；试运行按分支隔离，避免不同 PR 替换彼此的待运行任务。
     concurrency:
-      group: frit-release-${{ github.repository }}
+      group: ${{ inputs.dry-run && format('frit-release-dry-run-{0}-{1}', github.repository, github.ref) || format('frit-release-{0}', github.repository) }}
       cancel-in-progress: false
     outputs:
       # 只有真的发布了才有值（试运行、另一次运行先发了时为空）。
