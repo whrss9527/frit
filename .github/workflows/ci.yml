@@ -31,6 +31,8 @@ jobs:
         run: Tests/release/test-changelog.sh
       - name: Frit 版本标签测试
         run: Tests/release/test-tag-version.sh
+      - name: Frit 版本标签的 CI 门槛测试
+        run: Tests/release/test-tag-ci.sh
 
   lint:
     name: shellcheck、actionlint
@@ -61,6 +63,8 @@ jobs:
         run: Tests/release/test-scripts.sh
       - name: Frit 版本标签测试（macOS 自带的 bash 3.2）
         run: Tests/release/test-tag-version.sh
+      - name: Frit 版本标签的 CI 门槛测试
+        run: Tests/release/test-tag-ci.sh
 
   release-dry-run:
     name: 发布流程试运行

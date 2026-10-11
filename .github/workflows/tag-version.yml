@@ -1,15 +1,14 @@
 name: tag-version
 
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
-    paths:
-      - CHANGELOG.md
-      - scripts/release/tag-version.sh
-      - .github/workflows/tag-version.yml
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -18,9 +17,20 @@ concurrency:
 
 jobs:
   tag:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: 确认该提交的 main CI 已通过
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/release/check-tag-ci.sh
       - name: 按 CHANGELOG 创建版本标签
         run: scripts/release/tag-version.sh
