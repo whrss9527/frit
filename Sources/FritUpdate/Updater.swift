@@ -39,6 +39,9 @@ public final class Updater: ObservableObject {
     private var activeSessions: [UUID: URLSession] = [:]
     private var generation = 0
     private var beforeCheck: Phase = .idle
+    private var isPreview = false
+    private var notesReleases: [GitHubRelease]?
+    private var notesReceivedCount: Int?
 
     public init(configuration: UpdateConfiguration) {
         self.configuration = configuration
@@ -62,6 +65,21 @@ public final class Updater: ObservableObject {
         default: return nil
         }
     }
+    /// Sample 和 SwiftUI 预览使用；预览对象的检查与安装入口不会执行网络或文件操作。
+    public static func preview(configuration: UpdateConfiguration, phase: Phase, lastChecked: Date? = nil) -> Updater {
+        let updater = Updater(configuration: configuration)
+        updater.isPreview = true
+        updater.phase = phase
+        updater.lastChecked = lastChecked
+        if case .failed(_, let error) = phase { updater.lastFailure = error }
+        return updater
+    }
+    public var localizedNotes: UpdateNotes? {
+        guard let notes = notesSinceCurrent else { return nil }
+        return UpdateNotes(current: notes.current, latest: notes.latest, releases: notesReleases,
+                           style: requestConfiguration.notes, channel: requestConfiguration.channel,
+                           receivedCount: notesReceivedCount)
+    }
     public var isInstalling: Bool {
         switch phase { case .downloading, .verifying, .installing, .relaunching: return true; default: return false }
     }
@@ -81,8 +99,14 @@ public final class Updater: ObservableObject {
     public var installProblem: String? {
         guard plan == nil else { return nil }
         return configuration.bundleURL.pathExtension == "app"
-            ? "请先把 \(configuration.appName) 移到应用程序后更新"
-            : "不是从 \(configuration.appName).app 运行的，没法在程序里更新"
+            ? updateText("请先把 %@ 移到应用程序后更新", configuration.appName)
+            : updateText("不是从 %@.app 运行的，没法在程序里更新", configuration.appName)
+    }
+    public var relocationNote: String? {
+        guard let plan, plan.relocating else { return nil }
+        let folder = FileManager.default.displayName(atPath: plan.target.deletingLastPathComponent().path)
+        return updateText("现在是从下载文件夹这类临时位置运行的，这次会装进%@", folder)
+            + (plan.trashAfter == nil ? "" : updateText("，旧的那份移到废纸篓"))
     }
 
     public func startAutomaticChecks(enabled: @escaping @MainActor () -> Bool) {
@@ -109,6 +133,7 @@ public final class Updater: ObservableObject {
 
     @discardableResult
     public func check(manual: Bool) async -> UpdateCandidate? {
+        guard !isPreview else { return nil }
         guard !isInstalling else { return candidate }
         if case .checking = phase { return nil }
         generation += 1
@@ -140,6 +165,8 @@ public final class Updater: ObservableObject {
             phase = .available(item)
             configuration.log.info("检查更新：有新版本 \(version)（当前 \(current)）")
             notesSinceCurrent = UpdateNotes(current: current, latest: latest, releases: nil, style: config.notes, channel: config.channel)
+            notesReleases = nil
+            notesReceivedCount = nil
             notesTask = Task { [weak self] in await self?.loadNotes(current: current, latest: latest, config: config, token: token) }
             if !manual, configuration.defaults.string(forKey: key("notifiedVersion")) != version.description {
                 configuration.defaults.set(version.description, forKey: key("notifiedVersion"))
@@ -151,7 +178,7 @@ public final class Updater: ObservableObject {
             phase = previous
             if !(error is CancellationError) {
                 configuration.log.error("检查更新失败：\(error.localizedDescription)")
-                if manual { checkError = "检查更新失败：\(error.localizedDescription)" }
+                if manual { checkError = updateText("检查更新失败：%@", error.localizedDescription) }
             }
             return nil
         }
@@ -168,6 +195,7 @@ public final class Updater: ObservableObject {
     }
 
     public func install() {
+        guard !isPreview else { return }
         guard let item = candidate, !isInstalling, installTask == nil else { return }
         if let problem = installProblem { phase = .failed(item, .notInstallable(problem)); return }
         guard item.canInstall else { phase = .failed(item, .noArchive); return }
@@ -213,6 +241,9 @@ public final class Updater: ObservableObject {
     private var requestConfiguration: UpdateConfiguration {
         var config = configuration
         config.channel = includePrereleases ? .includePrereleases : .stable
+        if let language = FritLocalization.languageOverride {
+            config.notes.language = language.lowercased().hasPrefix("zh") ? .chinese : .english
+        }
         return config
     }
     private func key(_ suffix: String) -> String { configuration.defaultsKeyPrefix + suffix }
@@ -257,6 +288,8 @@ public final class Updater: ObservableObject {
             let data = try await fetch(url, config: config)
             guard let releases = ReleaseFeed.parse(data), generation == token, !Task.isCancelled else { return }
             let count = (try? JSONSerialization.jsonObject(with: data) as? [Any])?.count ?? releases.count
+            notesReleases = releases
+            notesReceivedCount = count
             notesSinceCurrent = UpdateNotes(current: current, latest: latest, releases: releases, style: config.notes,
                                             channel: config.channel, receivedCount: count)
         } catch {
