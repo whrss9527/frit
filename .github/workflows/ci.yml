@@ -65,6 +65,9 @@ jobs:
         run: swift test
       - name: 更新组件 Sample 编译
         run: bash Examples/UpdateSample/make-app.sh
+      - name: Sample 实际更新与启动回滚
+        timeout-minutes: 5
+        run: bash Tests/release/test-update.sh
       - name: 发布逻辑与附件清单测试
         run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: 发布脚本自测
