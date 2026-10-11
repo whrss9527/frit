@@ -6,8 +6,8 @@ mode="${2:?需要 build、test 或 update}"
 task_root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$task_root/../app"
 case "$app:$mode" in
-  meno:build|stox:build|proxi:build) swift build ;;
-  meno:test|stox:test) swift test ;;
+  meno:build|stox:build|proxi:build) swift build 2>&1 | tee build.log ;;
+  meno:test|stox:test) swift test 2>&1 | tee test.log ;;
   proxi:test)
     bash Scripts/ci/install-fish.sh
     bash Scripts/ci/test.sh

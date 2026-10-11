@@ -74,7 +74,7 @@ jobs:
           app_sha=$(git -C app rev-parse HEAD 2>/dev/null || echo unavailable)
           {
             printf '### %s\n\n' "$FRIT_APP"
-            printf 'Frit `%s` · App `%s`\n\n' "$FRIT_SHA" "$app_sha"
+            printf 'Frit %s · App %s\n\n' "$FRIT_SHA" "$app_sha"
             if [ "$ACTIVE" != true ] && [ "$PIN" = success ]; then
               printf '尚未声明 Frit Swift 包：未运行，待 App 接入后自动生效。\n'
             else
