@@ -33,7 +33,7 @@ final class UpdateViewTests: XCTestCase {
                                     assets: [], body: "### 新增\n- 测试 **更新**")
         let archive = GitHubRelease.Asset(name: "Sample.zip", downloadURL: URL(string: "https://github.com/test/sample/releases/download/v2.0.0/Sample.zip")!,
                                          size: 1_234_567, digest: "sha256:" + String(repeating: "a", count: 64))
-        let item = UpdateCandidate(release: version, archive: archive)
+        let item = UpdateCandidate(release: version, archive: archive, checksums: nil)
         var config = UpdateConfiguration(repository: "test/sample", appName: "Sample")
         config.bundleURL = URL(fileURLWithPath: "/Applications/Sample.app")
         config.sessions = { _ in [] }

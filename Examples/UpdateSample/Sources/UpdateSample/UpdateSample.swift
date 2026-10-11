@@ -22,7 +22,7 @@ private struct PreviewGallery: View {
                                     body: "### 更新内容\n- 一键更新。\n- 保留设置与数据。")
         let asset = GitHubRelease.Asset(name: "Sample.zip", downloadURL: URL(string: "https://github.com/whrss9527/frit/releases/download/v2.0.0/Sample.zip")!,
                                        size: 5_432_100, digest: "sha256:" + String(repeating: "a", count: 64))
-        let candidate = UpdateCandidate(release: release, archive: asset)
+        let candidate = UpdateCandidate(release: release, archive: asset, checksums: nil)
         item = candidate
         states = [("idle", "未检查", .idle), ("checking", "检查中", .checking), ("upToDate", "已是最新", .upToDate),
             ("skipped", "已跳过", .skipped(candidate)), ("available", "有新版本", .available(candidate)),
