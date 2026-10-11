@@ -19,6 +19,18 @@ Frit 是玻璃熔块，做玻璃之前先烧好的基础原料。这几个 App �
 
 ## 发布流程
 
+### Frit 版本与引用
+
+Frit 使用 `主版本.次版本.修订号`。修订版修复问题；次版本增加功能；1.0 以后不兼容的公共 API 或工作流输入变更升级主版本。0.x 阶段的不兼容变更升级次版本，并在 CHANGELOG 注明。`Unreleased` 保存尚未发布的变更，新版本合入 main 后由 `tag-version.yml` 创建 `v<版本>`，已有标签不会移动。首次启用该工作流时创建当前的 `v0.1.0`。
+
+Swift 包按版本引用，例如：
+
+```swift
+.package(url: "https://github.com/whrss9527/frit.git", from: "0.1.0")
+```
+
+可复用工作流使用版本标签或完整提交 SHA，`uses: …@<ref>` 与 `frit-ref: <ref>` 必须相同。正式发版仍使用默认 `frit-ref: main` 会收到警告；框架无法从调用方的 GitHub 上下文可靠推断可复用工作流的引用。
+
 在 App 仓库里加一个工作流，比如 `.github/workflows/release.yml`：
 
 ```yaml

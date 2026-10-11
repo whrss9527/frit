@@ -1,0 +1,26 @@
+name: tag-version
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - CHANGELOG.md
+      - scripts/release/tag-version.sh
+      - .github/workflows/tag-version.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frit-version-tags
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: 按 CHANGELOG 创建版本标签
+        run: scripts/release/tag-version.sh
