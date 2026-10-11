@@ -113,5 +113,23 @@ final class AtomicUpdateTests: XCTestCase {
         do { try await UpdateInstaller.validate(app: f.source, expectedVersion: version, expectedIdentifier: "test.frit.Sample", signer: [.any], strict: [.nestedCode]); XCTFail("签名标识必须一致") }
         catch { guard case .wrongApp = error as? UpdateError else { return XCTFail("\(error)") } }
     }
+
+    func testLegacyMenoCleanupKeepsMigrationRollbackInformation() throws {
+        let f = Fixture(); defer { f.cleanup() }
+        let suite = "Frit.LegacyMeno." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let bundle = f.root.appendingPathComponent("Meno.app")
+        try f.make(bundle, version: "1.0.0")
+        let folder = f.root.appendingPathComponent(".Meno-update-" + UUID().uuidString)
+        try f.make(folder.appendingPathComponent("Previous.app.rejected"), version: "2.0.0")
+        try Data().write(to: folder.appendingPathComponent("Meno.zip"))
+        defaults.set(folder.path, forKey: "UpdateLeftovers")
+        XCTAssertNil(AtomicReplacement.finishLegacyMeno(bundle: f.target, defaults: defaults))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path))
+        XCTAssertEqual(AtomicReplacement.finishLegacyMeno(bundle: bundle, defaults: defaults), "2.0.0")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+        XCTAssertNil(defaults.object(forKey: "UpdateLeftovers"))
+    }
 }
 #endif

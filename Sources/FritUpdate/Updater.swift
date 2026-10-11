@@ -375,6 +375,7 @@ public final class Updater: ObservableObject {
     public static func finishPreviousUpdate(bundle: URL = Bundle.main.bundleURL) -> String? {
         guard bundle.isFileURL, bundle.pathExtension == "app", FileManager.default.fileExists(atPath: bundle.path) else { return nil }
         let atomicRejected = AtomicReplacement.finish(bundle: bundle)
+        let legacyRejected = AtomicReplacement.finishLegacyMeno(bundle: bundle)
         let parent = bundle.deletingLastPathComponent()
         let backup = parent.appendingPathComponent(".\(bundle.lastPathComponent).previous")
         let rejected = URL(fileURLWithPath: backup.path + ".rejected")
@@ -385,7 +386,7 @@ public final class Updater: ObservableObject {
         }
         try? FileManager.default.removeItem(at: backup)
         try? FileManager.default.removeItem(at: rejected)
-        return rolledBack ?? atomicRejected
+        return rolledBack ?? atomicRejected ?? legacyRejected
     }
 }
 #endif

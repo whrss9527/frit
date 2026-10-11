@@ -8,7 +8,7 @@ Meno 配置 `.strictChecks = [.minimumSystemVersion, .hostArchitecture, .nestedC
 
 旧副本留在私有兄弟目录而不是系统替换目录，沿用当前 Meno 的跨进程清理修复。FritSystem Relauncher 等旧进程退出、打开新 App、观察 45 秒：新 App 未启动或提前退出时把新包移到 `.rejected`，再把旧包放回。新 App 正常运行满启动宽限期后再调 `Updater.finishPreviousUpdate()`（Meno 原来等八秒），清理旧包以确认健康；如果回滚发生，返回被拒绝版本给 App 提示。
 
-清理只处理当前 App 的同目录、名称匹配且带格式标记的更新目录，拒绝符号链接。当前 App 不在原位置时不删除保留的旧包。迁移前 Meno 的 `UpdateLeftovers` 清理约定由 App 接入 PR 处理；本模块不假设其他 App 的旧 defaults 键。
+清理只处理当前 App 的同目录、名称匹配且带格式标记的更新目录，拒绝符号链接。当前 App 不在原位置时不删除保留的旧包。迁移前 Meno 的 `UpdateLeftovers` 同样兼容：只在 Meno.app 的同父目录、旧目录名前缀和 Meno.zip 标记都匹配时清理并返回拒绝版本；不会套用到其他 App。
 
 测试验证原生目录交换、两步回退、最后移动失败恢复、恢复失败保留、清理路径限制、严格系统与架构校验和签名 identifier；完整网络安装测试同时运行暂存和原子策略。Sample.app 的真实重启与提前退出回滚通过 #22 的集成测试验证后再合并本扩展。
 

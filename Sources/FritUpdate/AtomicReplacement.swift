@@ -70,5 +70,26 @@ enum AtomicReplacement {
         }
         return rejectedVersion
     }
+
+    /// Meno 旧更新器留下的目录：仅在 Meno.app 内、同父目录和旧归档标记都匹配时处理。
+    static func finishLegacyMeno(bundle: URL, defaults: UserDefaults = .standard) -> String? {
+        guard bundle.lastPathComponent == "Meno.app", let path = defaults.string(forKey: "UpdateLeftovers") else { return nil }
+        let folder = URL(fileURLWithPath: path).standardizedFileURL
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: folder.path) else { defaults.removeObject(forKey: "UpdateLeftovers"); return nil }
+        guard folder.deletingLastPathComponent().resolvingSymlinksInPath() == bundle.deletingLastPathComponent().resolvingSymlinksInPath(),
+              folder.lastPathComponent.hasPrefix(".Meno-update-"),
+              (try? folder.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == false,
+              manager.fileExists(atPath: folder.appendingPathComponent("Meno.zip").path),
+              manager.fileExists(atPath: bundle.appendingPathComponent("Contents/Info.plist").path) else { return nil }
+        let rejected = [folder.appendingPathComponent("Unpacked/Meno.app.rejected"), folder.appendingPathComponent("Previous.app.rejected")]
+        let version = rejected.compactMap { url -> String? in
+            guard let data = try? Data(contentsOf: url.appendingPathComponent("Contents/Info.plist")),
+                  let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
+            return info["CFBundleShortVersionString"] as? String
+        }.first
+        do { try manager.removeItem(at: folder); defaults.removeObject(forKey: "UpdateLeftovers"); return version }
+        catch { return nil }
+    }
 }
 #endif
