@@ -12,7 +12,7 @@ Frit 是玻璃熔块，做玻璃之前先烧好的基础原料。这几个 App �
 | `FritCore` | 只依赖 Foundation 的纯逻辑，Linux 上也能测试：版本比较、发布与附件解析、校验和、安装位置、双语更新说明和容错 JSON | 可以用 |
 | `FritUpdate` | 一键更新：检查、下载、校验、按团队 ID 校验签名、替换、重新启动，以及更新条和设置区的界面 | 计划中 |
 | `FritUI` | 玻璃材质、卡片、按钮样式、浮动面板 | 计划中 |
-| `FritSystem` | 全局快捷键和录制控件、登录时启动、通知、权限、日志 | 计划中 |
+| `FritSystem` | Shell、重启回滚和文件日志已提供；全局快捷键和录制控件、登录时启动、通知与权限待扩展 | 开发中 |
 | `FritSync` | iCloud 云盘文件同步 | 计划中 |
 
 模块按功能平铺，统一用 `Frit` 前缀。同时支持 macOS 13 和 iOS 17，只在 macOS 上有意义的模块（一键更新、全局快捷键这些）在 iOS 上编译为空。
@@ -108,6 +108,8 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 ## 开发
 
 公共更新逻辑的 API、各 App 对应的参数和迁移来源见 [docs/update-core.md](docs/update-core.md)。它们只整理数据；网络下载、签名验证、替换文件和界面由后续模块处理。
+
+最小系统模块的线程、日志和重启约定见 [docs/system.md](docs/system.md)。
 
 ```bash
 swift test                          # FritCore 单元测试（macOS 和 Linux）
