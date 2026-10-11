@@ -3,6 +3,8 @@ import Combine
 import Foundation
 import FritCore
 
+enum UpdateResources { static let bundle = Bundle.module }
+
 func updateText(_ key: String.LocalizationValue, _ arguments: CVarArg...) -> String {
     let localized: String
     if let bundle = FritLocalization.overriddenBundle(in: .module) {

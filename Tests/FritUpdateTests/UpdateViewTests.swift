@@ -16,6 +16,7 @@ final class UpdateViewTests: XCTestCase {
         XCTAssertEqual(updateText("有新版本 %@", "2.0.0"), "New version 2.0.0")
         let englishError = UpdateError.checksumMismatch.localizedDescription
         FritLocalization.languageOverride = "zh-Hans"
+        XCTAssertNotNil(FritLocalization.overriddenBundle(in: UpdateResources.bundle))
         XCTAssertEqual(updateText("检查更新"), "检查更新")
         XCTAssertEqual(updateText("有新版本 %@", "2.0.0"), "有新版本 2.0.0")
         XCTAssertNotEqual(UpdateError.checksumMismatch.localizedDescription, englishError)

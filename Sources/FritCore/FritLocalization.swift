@@ -29,6 +29,12 @@ public enum FritLocalization {
         if let base = normalized.split(separator: "-").first { candidates.append(String(base)) }
         for language in candidates {
             if let path = bundle.path(forResource: language, ofType: "lproj"), let selected = Bundle(path: path) { return selected }
+            // SwiftPM 会把 zh-Hans.lproj 规范化为 zh-hans.lproj；大小写不能阻断覆盖。
+            if let root = bundle.resourceURL,
+               let folders = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil),
+               let folder = folders.first(where: {
+                   $0.pathExtension == "lproj" && $0.deletingPathExtension().lastPathComponent.caseInsensitiveCompare(language) == .orderedSame
+               }), let selected = Bundle(url: folder) { return selected }
         }
         return nil
     }
