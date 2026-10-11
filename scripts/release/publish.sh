@@ -3,7 +3,8 @@
 #
 #   scripts/release/publish.sh
 #
-# 环境变量：TAG、SHA（这次打包的提交）、APP_NAME、ARCHIVES、ARCHIVE_DIR（SHA256SUMS.txt 所在的文件夹）、
+# 环境变量：TAG、SHA（这次打包的提交）、APP_NAME、RELEASE_ASSETS（assets.sh 输出的完整附件列表，缺省用 ARCHIVES）、
+# ARCHIVE_DIR（SHA256SUMS.txt 所在的文件夹）、
 # NOTES_FILE、PRERELEASE（true 时作为测试版）、GH_TOKEN。
 # 发布成功后把 tag 写进 $GITHUB_OUTPUT。
 #
@@ -27,14 +28,19 @@ flags=()
 if [ "${PRERELEASE:-}" = "true" ]; then
   flags+=(--prerelease)
 fi
-if ! gh release view "$TAG" >/dev/null 2>&1; then
-  gh release create "$TAG" --draft --verify-tag --title "${APP_NAME} ${TAG}" --notes-file "$NOTES_FILE" ${flags[@]+"${flags[@]}"}
-else
+if release_info "$TAG" >/dev/null; then
   gh release edit "$TAG" --notes-file "$NOTES_FILE"
+else
+  result=$?
+  if [ "$result" != 1 ]; then
+    echo "::error::查不到 ${TAG} 的 Release 状态，停止发布"
+    exit 1
+  fi
+  gh release create "$TAG" --draft --verify-tag --title "${APP_NAME} ${TAG}" --notes-file "$NOTES_FILE" ${flags[@]+"${flags[@]}"}
 fi
 files=()
 # shellcheck disable=SC2086
-for archive in $ARCHIVES; do
+for archive in ${RELEASE_ASSETS:-$ARCHIVES}; do
   files+=("$archive")
 done
 files+=("${ARCHIVE_DIR}/SHA256SUMS.txt")

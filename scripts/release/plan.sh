@@ -7,6 +7,7 @@
 # 环境变量：
 #   TAG        要发布的标签；留空时取 CHANGELOG（默认 CHANGELOG.md）最上面的版本
 #   ARCHIVES   要上传的 zip，空格分隔；用来判断上次发布有没有传完
+#   EXTRA_ASSETS、ASSET_ALIASES  额外附件和归档别名；同样要检查是否已上传
 #   OVERWRITE  true 时标签已存在也重新打包、替换附件
 #   DRY_RUN    true 时只试运行，在当前提交上打包
 #   GH_TOKEN   查 Release 用
@@ -37,8 +38,12 @@ else
     if [ "${OVERWRITE:-}" = "true" ]; then
       echo "${TAG} 已存在，在它指向的提交 ${tagged} 上重新打包"
     else
+      expected="${ARCHIVES:-} ${EXTRA_ASSETS:-}"
+      for mapping in ${ASSET_ALIASES:-}; do
+        expected="$expected ${mapping#*=}"
+      done
       complete=0
-      release_complete "$TAG" "${ARCHIVES:-}" || complete=$?
+      release_complete "$TAG" "$expected" || complete=$?
       if [ "$complete" = 0 ]; then
         echo "${TAG} 已经发布过，这次不发版。要发版就在 CHANGELOG.md 最上面加一节新版本。"
         exit 0

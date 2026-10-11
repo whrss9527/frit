@@ -175,4 +175,42 @@ pass "测试版"
 if TAG=1.0 plan; then fail "标签格式不对时应该失败"; fi
 pass "标签格式检查"
 
+# 12. 公证后生成的完整附件列表必须上传，补发判断也要包含额外附件和归档别名。
+reset_gh
+printf '{"plugins":[]}\n' > dist/plugins.json
+export EXTRA_ASSETS=dist/plugins.json ASSET_ALIASES=dist/App.zip=dist/LegacyApp.zip
+GITHUB_ENV="$work/asset-env" "$release/assets.sh" > "$work/asset-log"
+RELEASE_ASSETS="$(sed -n 's/^RELEASE_ASSETS=//p' "$work/asset-env")"
+export RELEASE_ASSETS
+publish "$A" || { cat "$work/log"; fail "发布完整附件"; }
+for asset in App.zip plugins.json LegacyApp.zip SHA256SUMS.txt; do
+  grep -qxF "$asset" "$FAKE_GH/assets" || fail "没有上传 $asset"
+done
+if grep -qxF release-assets.json "$FAKE_GH/assets"; then
+  fail "内部清单不应该当成发布附件"
+fi
+plan
+[ -z "$(output tag)" ] || { cat "$work/log"; fail "附件齐全时不应该再发"; }
+pass "上传完整附件，齐全时不再发"
+for missing in plugins.json LegacyApp.zip; do
+  grep -vxF "$missing" "$FAKE_GH/assets" > "$work/assets" || true
+  mv "$work/assets" "$FAKE_GH/assets"
+  plan
+  [ "$(output sha)" = "$A" ] || { cat "$work/log"; fail "缺 $missing 时应该在标签提交上补发"; }
+  publish "$A" || { cat "$work/log"; fail "补发 $missing"; }
+  grep -qxF "$missing" "$FAKE_GH/assets" || fail "补发后仍缺少 $missing"
+  pass "缺 $missing 时补发"
+done
+
+# 13. 发布前查询失败也不能当成不存在，更不能创建 Release 或覆盖已有附件。
+reset_gh
+if FAKE_GH_VIEW_ERROR=1 publish "$A"; then
+  cat "$work/log"; fail "发布时查不了 Release 应该失败"
+fi
+if grep -qE 'release (create|edit|upload)' "$FAKE_GH/calls"; then
+  cat "$FAKE_GH/calls"; fail "查询失败后不能修改 Release"
+fi
+[ -z "$(output tag)" ] || fail "查询失败时不输出发布成功"
+pass "发布时查询失败不会创建或上传"
+
 echo "plan.sh、publish.sh 测试通过"

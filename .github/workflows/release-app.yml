@@ -38,6 +38,14 @@ on:
         description: "要上传的 zip，空格分隔，都要在同一个文件夹里，比如 dist/Stox.zip"
         required: true
         type: string
+      extra-assets:
+        description: "只上传并计算校验和的额外附件，空格分隔，与 archives 在同一目录；签名公证由调用方负责"
+        type: string
+        default: ""
+      asset-aliases:
+        description: "公证后复制的 zip 别名，空格分隔的 源归档=目标路径；均在归档目录，目标必须不存在"
+        type: string
+        default: ""
       test-command:
         description: "打包前跑的测试，留空不跑"
         required: false
@@ -109,6 +117,9 @@ on:
       tag:
         description: "这次发布的标签；没有发布时为空"
         value: ${{ jobs.release.outputs.tag }}
+      assets:
+        description: "应用归档、额外附件、别名的 JSON 数组，每项包含 name 和 sha256；没有构建时为空，试运行也输出"
+        value: ${{ jobs.release.outputs.assets }}
 
 permissions:
   contents: write
@@ -134,6 +145,8 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
           ARCHIVES: ${{ inputs.archives }}
+          EXTRA_ASSETS: ${{ inputs.extra-assets }}
+          ASSET_ALIASES: ${{ inputs.asset-aliases }}
           OVERWRITE: ${{ inputs.overwrite }}
           DRY_RUN: ${{ inputs.dry-run }}
           GH_TOKEN: ${{ github.token }}
@@ -153,10 +166,13 @@ jobs:
     outputs:
       # 只有真的发布了才有值（试运行、另一次运行先发了时为空）。
       tag: ${{ steps.publish.outputs.tag }}
+      assets: ${{ steps.assets.outputs.assets }}
     env:
       TAG: ${{ needs.plan.outputs.tag }}
       APP_NAME: ${{ inputs.app-name }}
       ARCHIVES: ${{ inputs.archives }}
+      EXTRA_ASSETS: ${{ inputs.extra-assets }}
+      ASSET_ALIASES: ${{ inputs.asset-aliases }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -252,14 +268,9 @@ jobs:
             exit 1
           fi
           echo "已签名并通过公证"
-      - name: 校验和
-        run: |
-          names=""
-          for archive in $ARCHIVES; do
-            names="${names} $(basename "$archive")"
-          done
-          # shellcheck disable=SC2086
-          (cd "$ARCHIVE_DIR" && shasum -a 256 $names > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: 别名、附件清单与校验和
+        id: assets
+        run: .frit/scripts/release/assets.sh
       - name: 发布说明
         env:
           NOTES_COMMAND: ${{ inputs.notes-command }}
@@ -284,8 +295,9 @@ jobs:
         with:
           name: release-dry-run
           path: |
-            ${{ env.ARCHIVE_DIR }}/*.zip
+            ${{ steps.assets.outputs.paths }}
             ${{ env.ARCHIVE_DIR }}/SHA256SUMS.txt
+            ${{ env.ASSET_MANIFEST }}
             ${{ env.NOTES_FILE }}
       - name: 发布
         id: publish

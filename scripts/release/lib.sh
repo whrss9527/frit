@@ -13,11 +13,10 @@ remote_tag_commit() {
   fi
 }
 
-# Release 已经公开（不是草稿），并且每个 zip 和 SHA256SUMS.txt 都传上去了。
-#   release_complete 标签 "dist/A.zip dist/B.zip"
-# 返回 0：发完了；1：没有这个 Release、还是草稿或者缺附件；2：查不了（网络、权限）。
-release_complete() {
-  local info err state assets archive name
+# 查询 Release；只有明确的 not found 才当作尚未创建，网络或权限错误不能触发重发。
+# 返回 0：已找到并输出状态和附件；1：不存在；2：查不了。
+release_info() {
+  local info err
   err="$(mktemp)"
   if ! info="$(gh release view "$1" --json isDraft,assets --jq '(if .isDraft then "draft" else "published" end), (.assets[].name)' 2>"$err")"; then
     if grep -qi "not found" "$err"; then
@@ -29,6 +28,15 @@ release_complete() {
     return 2
   fi
   rm -f "$err"
+  printf '%s\n' "$info"
+}
+
+# Release 已经公开（不是草稿），并且每个附件和 SHA256SUMS.txt 都传上去了。
+#   release_complete 标签 "dist/A.zip dist/plugins.json dist/LegacyA.zip"
+# 返回 0：发完了；1：没有这个 Release、还是草稿或者缺附件；2：查不了（网络、权限）。
+release_complete() {
+  local info state assets archive name
+  info="$(release_info "$1")" || return $?
   state="$(printf '%s\n' "$info" | head -1)"
   [ "$state" = "published" ] || return 1
   assets="$(printf '%s\n' "$info" | tail -n +2)"
