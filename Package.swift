@@ -9,12 +9,15 @@ let package = Package(
     products: [
         .library(name: "FritCore", targets: ["FritCore"]),
         .library(name: "FritSystem", targets: ["FritSystem"]),
+        .library(name: "FritUpdate", targets: ["FritUpdate"]),
     ],
     targets: [
         // 只依赖 Foundation 的纯逻辑，Linux 上也能编译和测试。
         .target(name: "FritCore"),
         .target(name: "FritSystem", dependencies: ["FritCore"]),
+        .target(name: "FritUpdate", dependencies: ["FritCore", "FritSystem"]),
         .testTarget(name: "FritCoreTests", dependencies: ["FritCore"]),
         .testTarget(name: "FritSystemTests", dependencies: ["FritSystem"]),
+        .testTarget(name: "FritUpdateTests", dependencies: ["FritUpdate"]),
     ]
 )
