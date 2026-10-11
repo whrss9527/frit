@@ -12,4 +12,6 @@ Frit 是 Pop、Meno、Stox、Proxi 共用的 Swift 库和发布流程，MIT 许�
 
 ## 规划和待办
 
-Frit 的待办在私有仓库 [whrss9527/plan](https://github.com/whrss9527/plan) 的 `projects/infra.md` 里，名字以 `kit-` 开头的任务。流程见 plan 仓库的 `AGENTS.md`。
+Frit 自己的 bug 和改进在[本仓库的 issue](https://github.com/whrss9527/frit/issues) 里：标了 `agent` 的由 Agent 认领，先按优先级、同优先级按编号处理；PR 写 `Closes #编号`，合并时自动关闭 issue。
+
+跨 App 的规划仍在私有仓库 [whrss9527/plan](https://github.com/whrss9527/plan) 的 `projects/infra.md` 里，任务名以 `kit-` 开头。两种任务的认领、依赖和交付流程都见 plan 仓库的 `AGENTS.md`。
