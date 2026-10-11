@@ -71,7 +71,7 @@ A 和 B 填一组就行，两组都填时用 A。
 
 ## 发版前的更新端到端验证
 
-App 的可复用工作流调用增加 `update-e2e-command: scripts/update-e2e.sh`，命令由 App 仓库提供。Frit 在签名、公证并生成校验和后、打标签发布前运行它；非零退出状态直接阻断发布。命令也会在 dry-run 中运行。
+使用 Frit 0.3.0 或更新版本时，App 的可复用工作流调用增加 `update-e2e-command: scripts/update-e2e.sh`，命令由 App 仓库提供。Frit 在签名、公证并生成校验和后、打标签发布前运行它；非零退出状态直接阻断发布。命令也会在 dry-run 中运行。
 
 命令可读取 `ARCHIVE_DIR`（最终归档目录）、`VERSION`（不含 v 的版本）、`SHA256SUMS_FILE`（完整校验和路径）和 `FRIT_RELEASE`（本次选用的发布脚本目录）。建议脚本先下载最新正式版，核对下载校验和及 Team ID，使用临时安装位置启动旧版，再将更新源指向本次构建，验证新进程启动和版本。
 
