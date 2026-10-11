@@ -84,6 +84,8 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 | `notarize.sh` | 提交公证、等结果、钉票据、重新打包；没通过时打印苹果的日志 |
 | `thin-archives.sh` | 从通用二进制的 .app 打出 arm64、x86_64 两个精简包，重新签名 |
 | `assets.sh` | 公证后复制别名，生成附件清单和校验和 |
+| `plan.sh` | 判断是否发版；草稿或缺附件时在标签对应的提交上补发 |
+| `publish.sh` | 发布前核对标签与构建提交，上传全部附件后公开 Release |
 | `changelog.sh` | 读 CHANGELOG.md 最上面的版本、取某个版本的一节 |
 | `latest.py` | 比较全部正式版，防止重新打包旧版后 latest 倒退 |
 | `fake-release.sh` | 更新端到端测试用：把 .app 改成 9.9.9，用本地 HTTP 服务器提供 GitHub 格式的 latest.json 和安装包 |
@@ -95,6 +97,7 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 swift test                          # FritCore 单元测试（macOS 和 Linux）
 python3 -m unittest discover -s Tests/release -p 'test_*.py' # 发布逻辑和附件清单测试
 Tests/release/test-changelog.sh     # changelog.sh 测试（macOS 和 Linux）
+Tests/release/test-publish.sh       # 发布竞态、失败恢复与附件完整性（macOS 和 Linux）
 Tests/release/test-scripts.sh       # 发布脚本自测（macOS）：临时证书签名、精简包、假 xcrun 公证、假发布
 ```
 
