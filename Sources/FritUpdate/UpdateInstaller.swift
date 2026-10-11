@@ -61,7 +61,7 @@ public enum UpdateInstaller {
 
     public static func validate(app: URL, expectedVersion: AppVersion, expectedIdentifier: String? = nil,
                                 signer: [SignerPolicy] = [.sameTeamAsCurrent], strict: StrictChecks = []) async throws {
-        guard strict.isEmpty else { throw UpdateError.unsupportedChecks }
+        guard strict.subtracting(.all).isEmpty else { throw UpdateError.unsupportedChecks }
         guard let data = try? Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
             throw UpdateError.wrongApp("读不到 Info.plist")
@@ -71,8 +71,26 @@ public enum UpdateInstaller {
         guard let text = plist["CFBundleShortVersionString"] as? String, AppVersion(text) == expectedVersion else {
             throw UpdateError.wrongApp("版本不是 \(expectedVersion)")
         }
+        if strict.contains(.minimumSystemVersion), let minimum = plist["LSMinimumSystemVersion"] as? String {
+            guard let required = AppVersion(minimum) else { throw UpdateError.wrongApp("最低系统版本无效") }
+            let os = ProcessInfo.processInfo.operatingSystemVersion
+            let current = AppVersion("\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)")!
+            guard current >= required else { throw UpdateError.needsNewerMacOS(minimum) }
+        }
+        if strict.contains(.hostArchitecture) {
+            let architecture = Updater.machineArchitecture == .arm64 ? NSBundleExecutableArchitectureARM64 : NSBundleExecutableArchitectureX86_64
+            guard Bundle(url: app)?.executableArchitectures?.contains(NSNumber(value: architecture)) == true else {
+                throw UpdateError.otherProcessor
+            }
+        }
         let result = try await Shell.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path], timeout: 120)
         guard result.succeeded else { throw UpdateError.wrongApp("签名校验失败：\(result.trimmedOutput)") }
+        if strict.contains(.nestedCode) {
+            guard CodeSignature.satisfies(app, requirement: nil, nestedCode: true),
+                  expectedIdentifier.map({ CodeSignature.identifier(of: app) == $0 }) ?? true else {
+                throw UpdateError.wrongApp("嵌套签名或签名标识不符")
+            }
+        }
         guard signer.contains(where: { CodeSignature.accepts(app, policy: $0) }) else { throw UpdateError.wrongSigner }
     }
 
@@ -81,17 +99,29 @@ public enum UpdateInstaller {
     public static func install(newApp: URL, replacing target: URL, strategy: InstallStrategy = .staged,
                                log: UpdateLogger = .osLog) async throws -> URL? {
         try Task.checkCancellation()
+        if strategy == .atomicSwap {
+            do { return try await background { try AtomicReplacement.swap(newApp: newApp, target: target) } }
+            catch let error as NSError where isBlockedBySystem(error) { throw UpdateError.appManagement }
+            catch let error as NSError where needsAdmin(error) {
+                guard FileManager.default.fileExists(atPath: target.path) else { throw UpdateError.install(error.localizedDescription) }
+                log.info("原子替换需要管理员权限，改用暂存安装")
+            }
+        }
         let parent = target.deletingLastPathComponent()
         let staged = parent.appendingPathComponent(".\(target.lastPathComponent).update")
         let backup = parent.appendingPathComponent(".\(target.lastPathComponent).previous")
         do {
-            try await background { try StagedReplacement.swap(newApp: newApp, target: target, staged: staged, backup: backup) }
+            try await background {
+                try StagedReplacement.swap(newApp: newApp, target: target, staged: staged, backup: backup,
+                                           retainPrevious: strategy == .atomicSwap)
+            }
         } catch let error as NSError where isBlockedBySystem(error) {
             throw UpdateError.appManagement
         } catch let error as NSError where needsAdmin(error) {
             log.info("替换程序需要管理员权限，改用授权对话框（\(error.localizedDescription)）")
             let source = StagedReplacement.source(newApp: newApp, staged: staged)
-            let script = StagedReplacement.privilegedScript(source: source, target: target, staged: staged, backup: backup)
+            let script = StagedReplacement.privilegedScript(source: source, target: target, staged: staged, backup: backup,
+                                                           retainPrevious: strategy == .atomicSwap)
             let appleScript = "do shell script " + Shell.appleScriptString(script) + " with administrator privileges"
             let result = try await Shell.run("/usr/bin/osascript", ["-e", appleScript], timeout: 300)
             guard result.succeeded else {
@@ -102,7 +132,18 @@ public enum UpdateInstaller {
         } catch {
             throw UpdateError.install(error.localizedDescription)
         }
-        return nil
+        return strategy == .atomicSwap && FileManager.default.fileExists(atPath: backup.path) ? backup : nil
+    }
+
+    /// 原子路径的下载/解压位于目标所在卷；成功后旧包另移到私有兄弟目录保留。
+    static func workspace(replacing target: URL, strategy: InstallStrategy) throws -> URL {
+        let manager = FileManager.default
+        if strategy == .atomicSwap {
+            return try manager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: target, create: true)
+        }
+        let folder = manager.temporaryDirectory.appendingPathComponent("Frit-update-" + UUID().uuidString)
+        try manager.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        return folder
     }
 
     public static func posixCode(_ error: NSError) -> Int? {

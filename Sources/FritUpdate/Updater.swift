@@ -91,7 +91,10 @@ public final class Updater: ObservableObject {
         let testing = ProcessInfo.processInfo.environment[configuration.environmentPrefix + "_TEST_TRANSLOCATED"] == "1"
         let translocated = testing || Translocation.isTranslocated(bundle)
         let original = testing ? bundle.standardizedFileURL : (translocated ? Translocation.originalURL(of: bundle) : nil)
-        let readOnly = (try? bundle.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly ?? false
+        let manager = FileManager.default
+        let cannotReplace = configuration.installStrategy == .atomicSwap && !configuration.relocatesWhenTranslocated
+            && (!manager.isWritableFile(atPath: bundle.path) || !manager.isWritableFile(atPath: bundle.deletingLastPathComponent().path))
+        let readOnly = ((try? bundle.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly ?? false) || cannotReplace
         return InstallLocation.plan(bundle: bundle, appName: configuration.appName, translocated: translocated,
                                     original: original, readOnly: readOnly, relocates: configuration.relocatesWhenTranslocated,
                                     folders: configuration.applicationsFolders, canWrite: Self.canWrite)
@@ -310,8 +313,7 @@ public final class Updater: ObservableObject {
         guard let version = item.release.version else { throw UpdateError.badResponse }
         guard !archiveAsset.name.isEmpty, !archiveAsset.name.contains("/"), archiveAsset.name != ".", archiveAsset.name != ".." else { throw UpdateError.badResponse }
         let manager = FileManager.default
-        let work = manager.temporaryDirectory.appendingPathComponent(config.appName + "-update-" + UUID().uuidString, isDirectory: true)
-        try manager.createDirectory(at: work, withIntermediateDirectories: true)
+        let work = try UpdateInstaller.workspace(replacing: plan.target, strategy: config.installStrategy)
         defer { try? manager.removeItem(at: work) }
         let archive = work.appendingPathComponent(archiveAsset.name)
         phase = .downloading(item, nil)
@@ -356,7 +358,7 @@ public final class Updater: ObservableObject {
         guard config.relaunch(plan.target, previous) else { throw UpdateError.install("无法重新打开程序") }
     }
 
-    public static var machineArchitecture: Architecture {
+    nonisolated public static var machineArchitecture: Architecture {
         var value: Int32 = 0
         var size = MemoryLayout<Int32>.size
         return sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 && value == 1 ? .arm64 : .x86_64
@@ -372,6 +374,8 @@ public final class Updater: ObservableObject {
     @discardableResult
     public static func finishPreviousUpdate(bundle: URL = Bundle.main.bundleURL) -> String? {
         guard bundle.isFileURL, bundle.pathExtension == "app", FileManager.default.fileExists(atPath: bundle.path) else { return nil }
+        let atomicRejected = AtomicReplacement.finish(bundle: bundle)
+        let legacyRejected = AtomicReplacement.finishLegacyMeno(bundle: bundle)
         let parent = bundle.deletingLastPathComponent()
         let backup = parent.appendingPathComponent(".\(bundle.lastPathComponent).previous")
         let rejected = URL(fileURLWithPath: backup.path + ".rejected")
@@ -382,7 +386,7 @@ public final class Updater: ObservableObject {
         }
         try? FileManager.default.removeItem(at: backup)
         try? FileManager.default.removeItem(at: rejected)
-        return rolledBack
+        return rolledBack ?? atomicRejected ?? legacyRejected
     }
 }
 #endif

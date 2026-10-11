@@ -190,7 +190,7 @@ final class MacUpdateTests: XCTestCase {
         catch { guard case .wrongApp = error as? UpdateError else { return XCTFail("\(error)") } }
         do { try await UpdateInstaller.validate(app: app, expectedVersion: AppVersion("3.0.0")!, signer: [.any]); XCTFail("应拒绝版本不符") }
         catch { guard case .wrongApp = error as? UpdateError else { return XCTFail("\(error)") } }
-        do { try await UpdateInstaller.validate(app: app, expectedVersion: version, signer: [.any], strict: StrictChecks(rawValue: 1)); XCTFail("不能忽略未知检查") }
+            do { try await UpdateInstaller.validate(app: app, expectedVersion: version, signer: [.any], strict: StrictChecks(rawValue: 1 << 31)); XCTFail("不能忽略未知检查") }
         catch { XCTAssertEqual(error as? UpdateError, .unsupportedChecks) }
         try Data("tampered".utf8).write(to: app.appendingPathComponent("Contents/Info.plist"))
         XCTAssertFalse(CodeSignature.satisfies(app, requirement: nil))
@@ -260,31 +260,36 @@ final class MacUpdateTests: XCTestCase {
     }
 
     func testFullUpdatePipelineExtractsValidatesReplacesAndRelaunches() async throws {
-        let f = try UpdateFixture(); defer { f.cleanup() }
-        try await f.makeApp(at: f.target, version: "1.0.0")
-        let next = f.root.appendingPathComponent("new/Sample.app")
-        try await f.makeApp(at: next, version: "2.0.0")
-        let archive = f.root.appendingPathComponent("Sample.zip")
-        let zip = try await Shell.run("/usr/bin/ditto", ["-c", "-k", "--keepParent", next.path, archive.path])
-        XCTAssertTrue(zip.succeeded, zip.output)
-        let size = try XCTUnwrap(archive.resourceValues(forKeys: [.fileSizeKey]).fileSize)
-        try f.writeFeed(digest: UpdateInstaller.sha256(of: archive), size: size)
-        var config = f.configuration()
-        var relaunched = false
-        config.relaunch = { target, previous in
-            XCTAssertEqual(target.standardizedFileURL, f.target.standardizedFileURL)
-            XCTAssertNil(previous)
-            relaunched = true
-            return true
+        for strategy in [InstallStrategy.staged, .atomicSwap] {
+            let f = try UpdateFixture(); defer { f.cleanup() }
+            try await f.makeApp(at: f.target, version: "1.0.0")
+            let next = f.root.appendingPathComponent("new/Sample.app")
+            try await f.makeApp(at: next, version: "2.0.0")
+            let archive = f.root.appendingPathComponent("Sample.zip")
+            let zip = try await Shell.run("/usr/bin/ditto", ["-c", "-k", "--keepParent", next.path, archive.path])
+            XCTAssertTrue(zip.succeeded, zip.output)
+            let size = try XCTUnwrap(archive.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+            try f.writeFeed(digest: UpdateInstaller.sha256(of: archive), size: size)
+            var config = f.configuration()
+            config.installStrategy = strategy
+            var relaunched = false
+            config.relaunch = { target, previous in
+                XCTAssertEqual(target.standardizedFileURL, f.target.standardizedFileURL)
+                if strategy == .atomicSwap { XCTAssertNotNil(previous) }
+                else { XCTAssertNil(previous) }
+                relaunched = true
+                return true
+            }
+            let updater = Updater(configuration: config)
+            await updater.checkAndInstall()
+            guard case .relaunching = updater.phase else { return XCTFail("\(updater.phase), \(String(describing: updater.lastFailure))") }
+            XCTAssertTrue(relaunched)
+            let plist = try Data(contentsOf: f.target.appendingPathComponent("Contents/Info.plist"))
+            let info = try XCTUnwrap(PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any])
+            XCTAssertEqual(info["CFBundleShortVersionString"] as? String, "2.0.0")
+            XCTAssertTrue(CodeSignature.satisfies(f.target, requirement: nil))
+            _ = Updater.finishPreviousUpdate(bundle: f.target)
         }
-        let updater = Updater(configuration: config)
-        await updater.checkAndInstall()
-        guard case .relaunching = updater.phase else { return XCTFail("\(updater.phase), \(String(describing: updater.lastFailure))") }
-        XCTAssertTrue(relaunched)
-        let plist = try Data(contentsOf: f.target.appendingPathComponent("Contents/Info.plist"))
-        let info = try XCTUnwrap(PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any])
-        XCTAssertEqual(info["CFBundleShortVersionString"] as? String, "2.0.0")
-        XCTAssertTrue(CodeSignature.satisfies(f.target, requirement: nil))
     }
 
     func testChannelFilteringCheckFailureAndCancellation() async throws {

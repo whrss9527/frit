@@ -10,12 +10,16 @@ public enum SignerPolicy: Equatable, Sendable {
     case any
 }
 
-public enum InstallStrategy: Sendable { case staged }
+public enum InstallStrategy: Sendable { case staged, atomicSwap }
 
-/// 后续严格检查用的扩展点；当前版本对未知位明确失败，不静默忽略。
+/// 未知位明确失败，不静默忽略；各 App 可逐项启用。
 public struct StrictChecks: OptionSet, Sendable {
     public let rawValue: UInt32
     public init(rawValue: UInt32) { self.rawValue = rawValue }
+    public static let minimumSystemVersion = StrictChecks(rawValue: 1 << 0)
+    public static let hostArchitecture = StrictChecks(rawValue: 1 << 1)
+    public static let nestedCode = StrictChecks(rawValue: 1 << 2)
+    public static let all: StrictChecks = [.minimumSystemVersion, .hostArchitecture, .nestedCode]
 }
 
 public struct UpdateLogger: Sendable {
@@ -120,6 +124,8 @@ public enum UpdateError: LocalizedError, Equatable, Sendable {
     case appManagement
     case wrongSigner
     case unsupportedChecks
+    case needsNewerMacOS(String)
+    case otherProcessor
 
     public var errorDescription: String? {
         switch self {
@@ -138,6 +144,8 @@ public enum UpdateError: LocalizedError, Equatable, Sendable {
         case .appManagement: return updateText("macOS 不允许替换程序。到系统设置的隐私与安全性 → App 管理中允许后重试")
         case .wrongSigner: return updateText("新版本不是允许的开发者签名的，为了安全没有安装")
         case .unsupportedChecks: return updateText("此版本尚不支持要求的严格检查")
+        case .needsNewerMacOS(let version): return updateText("这个版本需要 macOS %@ 或以上", version)
+        case .otherProcessor: return updateText("这个版本不支持本机处理器")
         }
     }
 }

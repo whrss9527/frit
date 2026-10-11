@@ -53,6 +53,20 @@ final class UpdateReplacementTests: XCTestCase {
         XCTAssertEqual(try f.value(f.target), "current")
     }
 
+    func testRetainingPreviousForAtomicFallbackAndAuthorization() throws {
+        let f = Fixture(); defer { f.cleanup() }
+        try f.write("new", at: f.newApp); try f.write("old", at: f.target)
+        try StagedReplacement.swap(newApp: f.newApp, target: f.target, staged: f.staged, backup: f.backup, retainPrevious: true)
+        XCTAssertEqual(try f.value(f.target), "new")
+        XCTAssertEqual(try f.value(f.backup), "old")
+        try f.write("newer", at: f.staged)
+        let script = StagedReplacement.privilegedScript(source: f.staged, target: f.target, staged: f.staged,
+                                                       backup: f.backup, retainPrevious: true)
+        XCTAssertEqual(try execute(script), 0)
+        XCTAssertEqual(try f.value(f.target), "newer")
+        XCTAssertEqual(try f.value(f.backup), "new")
+    }
+
     func testPermissionFailureAfterStagingRetainsNewAppForFallback() throws {
         let f = Fixture(); defer { f.cleanup() }
         try f.write("new", at: f.newApp); try f.write("old", at: f.target)

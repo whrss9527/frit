@@ -48,7 +48,9 @@
 "读不懂服务器返回的内容" = "Could not read the server response";
 "跳过这个版本" = "Skip This Version";
 "还没有检查过更新" = "Haven't checked for updates yet";
+"这个版本不支持本机处理器" = "This version does not support this Mac’s processor";
 "这个版本没有可以直接安装和校验的附件，请到发布页手动下载" = "This release has no verifiable installer. Download it from the release page.";
+"这个版本需要 macOS %@ 或以上" = "This version requires macOS %@ or later";
 "重试" = "Retry";
 "马上就好，请不要退出" = "Almost done; please don't quit";
 "（经%@）" = " (via %@)";

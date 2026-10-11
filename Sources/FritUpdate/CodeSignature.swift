@@ -15,6 +15,9 @@ public enum CodeSignature {
     }
 
     public static func teamIdentifier(of url: URL) -> String? { team(in: staticCode(url)) }
+    public static func identifier(of url: URL) -> String? {
+        information(staticCode(url))?[kSecCodeInfoIdentifier as String] as? String
+    }
     public static func designatedRequirement(of url: URL) -> SecRequirement? {
         guard let code = staticCode(url) else { return nil }
         return designatedRequirement(code)
@@ -32,9 +35,10 @@ public enum CodeSignature {
         return satisfies(url, requirement: requirement)
     }
 
-    public static func satisfies(_ url: URL, requirement: SecRequirement?) -> Bool {
+    public static func satisfies(_ url: URL, requirement: SecRequirement?, nestedCode: Bool = false) -> Bool {
         guard let code = staticCode(url) else { return false }
-        let flags = SecCSFlags(rawValue: UInt32(kSecCSCheckAllArchitectures | kSecCSStrictValidate))
+        let flags = SecCSFlags(rawValue: UInt32(kSecCSCheckAllArchitectures | kSecCSStrictValidate)
+                               | (nestedCode ? UInt32(kSecCSCheckNestedCode) : 0))
         return SecStaticCodeCheckValidity(code, flags, requirement) == errSecSuccess
     }
 

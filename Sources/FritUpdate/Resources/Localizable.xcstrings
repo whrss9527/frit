@@ -880,6 +880,38 @@
           }
         }
       }
+    },
+    "这个版本需要 macOS %@ 或以上": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个版本需要 macOS %@ 或以上"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This version requires macOS %@ or later"
+          }
+        }
+      }
+    },
+    "这个版本不支持本机处理器": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个版本不支持本机处理器"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This version does not support this Mac’s processor"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
