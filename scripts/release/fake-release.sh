@@ -11,6 +11,7 @@
 #   FAKE_VERSION  假版本号，默认 9.9.9
 #   FAKE_PORT     端口，默认 8765
 #   FAKE_DIR      放文件的目录，默认 $RUNNER_TEMP/fake-release
+#   CODESIGN_IDENTITY / CODESIGN_KEYCHAIN  复用发布证书；不设时使用 ad-hoc 签名
 # 输出：服务器起来后打印 latest.json 的地址；在 GitHub Actions 里同时写进 $GITHUB_ENV 的 FAKE_RELEASE_URL，
 # 服务器进程号写进 FAKE_RELEASE_PID（测完 kill 掉即可）。
 set -euo pipefail
@@ -24,12 +25,21 @@ port="${FAKE_PORT:-8765}"
 dir="${FAKE_DIR:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/fake-release}"
 base="http://127.0.0.1:${port}"
 app_name="$(basename "$app")"
+release="$(cd "$(dirname "$0")" && pwd)"
 
 rm -rf "$dir" && mkdir -p "$dir/stage"
 ditto "$app" "$dir/stage/$app_name"
+# 从原始 App 读取权限声明，只重签修改过 Info.plist 的外层 App。
+# 内部辅助程序和框架保持原来的签名及各自的权限声明。
+codesign -d --entitlements - "$app" > "$dir/entitlements.plist" 2>/dev/null
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$dir/stage/$app_name/Contents/Info.plist"
-# 改了 Info.plist 签名就失效了，重新 ad-hoc 签名（假发布只用来测流程，不测证书）。
-codesign --force --deep --sign - "$dir/stage/$app_name"
+if [ -s "$dir/entitlements.plist" ]; then
+  "$release/sign.sh" "$dir/stage/$app_name" "$dir/entitlements.plist"
+else
+  "$release/sign.sh" "$dir/stage/$app_name"
+fi
+rm "$dir/entitlements.plist"
+codesign --verify --deep --strict "$dir/stage/$app_name"
 
 first="$1"
 (cd "$dir/stage" && ditto -c -k --keepParent "$app_name" "../$first")
