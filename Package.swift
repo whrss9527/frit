@@ -8,10 +8,13 @@ let package = Package(
     platforms: [.macOS(.v13), .iOS(.v17)],
     products: [
         .library(name: "FritCore", targets: ["FritCore"]),
+        .library(name: "FritSystem", targets: ["FritSystem"]),
     ],
     targets: [
         // 只依赖 Foundation 的纯逻辑，Linux 上也能编译和测试。
         .target(name: "FritCore"),
+        .target(name: "FritSystem", dependencies: ["FritCore"]),
         .testTarget(name: "FritCoreTests", dependencies: ["FritCore"]),
+        .testTarget(name: "FritSystemTests", dependencies: ["FritSystem"]),
     ]
 )
