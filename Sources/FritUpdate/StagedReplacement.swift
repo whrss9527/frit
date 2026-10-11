@@ -8,7 +8,8 @@ enum StagedReplacement {
         fileManager.fileExists(atPath: newApp.path) ? newApp : staged
     }
 
-    static func swap(newApp: URL, target: URL, staged: URL, backup: URL, fileManager: FileManager = .default) throws {
+    static func swap(newApp: URL, target: URL, staged: URL, backup: URL, fileManager: FileManager = .default,
+                     retainPrevious: Bool = false) throws {
         let sourcePath = newApp.standardizedFileURL.resolvingSymlinksInPath().path
         guard sourcePath != target.standardizedFileURL.resolvingSymlinksInPath().path else {
             throw NSError(domain: NSPOSIXErrorDomain, code: Int(EINVAL))
@@ -29,10 +30,10 @@ enum StagedReplacement {
             }
             throw error
         }
-        try? fileManager.removeItem(at: backup)
+        if !retainPrevious { try? fileManager.removeItem(at: backup) }
     }
 
-    static func privilegedScript(source: URL, target: URL, staged: URL, backup: URL) -> String {
+    static func privilegedScript(source: URL, target: URL, staged: URL, backup: URL, retainPrevious: Bool = false) -> String {
         let (s, t, b) = (quote(staged.path), quote(target.path), quote(backup.path))
         var script = "mkdir -p \(quote(target.deletingLastPathComponent().path))"
         // /var 与 /private/var 等路径写法不同也可能指向同一份暂存包。
@@ -41,7 +42,7 @@ enum StagedReplacement {
         }
         script += " && { [ ! -e \(t) ] || { rm -rf \(b) && mv \(t) \(b); }; }"
             + " && { mv \(s) \(t) || { [ ! -e \(b) ] || mv \(b) \(t); exit 1; }; }"
-            + " && rm -rf \(b)"
+        if !retainPrevious { script += " && rm -rf \(b)" }
         return script
     }
 
