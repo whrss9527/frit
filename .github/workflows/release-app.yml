@@ -10,7 +10,15 @@ name: release-app
 #         build-command: UNIVERSAL=1 scripts/build-app.sh && cd dist && ditto -c -k --keepParent Stox.app Stox.zip
 #         archives: dist/Stox.zip
 #         frit-ref: <和上面同一个提交或标签>
-#       secrets: inherit
+#       secrets:
+#         MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+#         MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+#         NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+#         NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+#         NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+#         NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+#         NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+#         NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
 #
 # 流程：
 #   1. 定版本：没填 tag 时取 CHANGELOG.md 最上面的版本；这个版本已经有标签就不发（除非 overwrite）。
@@ -83,7 +91,11 @@ on:
         description: "必须用 Developer ID 签名并通过公证：没配证书或公证凭据、或者公证没通过时直接失败，不打标签也不发布"
         required: false
         type: boolean
-        default: false
+        default: true
+      team-id:
+        description: "预期的 10 位 Developer ID Team ID；非空时核对每个归档的签名团队"
+        type: string
+        default: ""
       dry-run:
         description: "只打包、签名、公证，不打标签也不发布，把 zip 和校验和作为这次运行的附件上传（Frit 自己的 CI 用它测试整个流程）"
         required: false
@@ -130,10 +142,10 @@ jobs:
       tag: ${{ steps.plan.outputs.tag }}
       sha: ${{ steps.plan.outputs.sha }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ inputs.ref || github.sha }}
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: whrss9527/Frit
           ref: ${{ inputs.frit-ref }}
@@ -192,12 +204,12 @@ jobs:
       EXTRA_ASSETS: ${{ inputs.extra-assets }}
       ASSET_ALIASES: ${{ inputs.asset-aliases }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.plan.outputs.sha }}
           # BUILD_NUMBER 用提交数，要完整历史。
           fetch-depth: 0
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: whrss9527/Frit
           ref: ${{ inputs.frit-ref }}
@@ -241,23 +253,9 @@ jobs:
           echo "ARCHIVE_DIR=${dir}" >> "$GITHUB_ENV"
           ls -la "$dir"
       - name: 检查签名
-        run: |
-          for archive in $ARCHIVES; do
-            work="$RUNNER_TEMP/check-$(basename "$archive" .zip)"
-            rm -rf "$work" && mkdir -p "$work"
-            ditto -x -k "$archive" "$work"
-            app="$(find "$work" -maxdepth 1 -name '*.app' -type d | head -1)"
-            [ -n "$app" ] || { echo "::error::${archive} 的最外层没有 .app"; exit 1; }
-            codesign --verify --deep --strict "$app"
-            app_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
-            [ "$app_version" = "$VERSION" ] || { echo "::error::${archive} 里的版本号是 ${app_version}，应该是 ${VERSION}"; exit 1; }
-            echo "$(basename "$archive")：版本 ${app_version}，$(codesign -dvv "$app" 2>&1 | awk -F= '/^Authority=/{print $2; exit}' || true)"
-            if [ -n "${CODESIGN_IDENTITY:-}" ]; then
-              info="$(codesign -dvv "$app" 2>&1)"
-              echo "$info" | grep -q "flags=.*runtime" || { echo "::error::${archive} 没有开 hardened runtime，公证不会通过"; exit 1; }
-              echo "$info" | grep -q "^Timestamp=" || { echo "::error::${archive} 没有安全时间戳，公证不会通过"; exit 1; }
-            fi
-          done
+        env:
+          TEAM_ID: ${{ inputs.team-id }}
+        run: .frit/scripts/release/check-signature.sh
       - name: 提交苹果公证并钉上票据
         env:
           NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
@@ -309,7 +307,7 @@ jobs:
           cat "$notes"
       - name: 上传到这次运行的附件（试运行）
         if: inputs.dry-run
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: release-dry-run
           path: |
