@@ -4,7 +4,9 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 release="$here/../../scripts/release"
 task_work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/frit-update.XXXXXX")
+task_work=$(cd "$task_work" && pwd -P)
 server_pid=""
+completed=false
 stop_apps() {
   /bin/ps -A -o pid=,command= | FRIT_TEST_ROOT="$task_work/" python3 -c '
 import os, signal, sys
@@ -16,9 +18,14 @@ for line in sys.stdin:
 '
 }
 cleanup() {
+  local status=$?
+  trap - EXIT
   stop_apps || true
   if [ -n "$server_pid" ]; then kill "$server_pid" 2>/dev/null || true; fi
   rm -rf "$task_work"
+  # bash 3.2 某些展开错误的退出码可能为零，必须确认所有场景走到了末尾。
+  if [ "$completed" != true ]; then status=1; fi
+  exit "$status"
 }
 trap cleanup EXIT
 fail() { echo "更新测试失败：$*" >&2; cat "$task_work"/*.log 2>/dev/null || true; exit 1; }
@@ -62,7 +69,7 @@ for strategy in staged atomic; do
   codesign --verify --deep --strict "$task_work/$strategy/Sample.app"
   sleep 1
   stop_apps
-  echo "$strategy：发现、下载、校验、替换、重新启动通过"
+  echo "${strategy}：发现、下载、校验、替换、重新启动通过"
 done
 
 printf '%064d  Sample.zip\n' 0 > "$task_work/feed/SHA256SUMS.txt"
@@ -100,3 +107,5 @@ has_log "$task_work/rollback.log" "SAMPLE_EARLY_EXIT version=9.9.9" || fail "没
 [ "$(version_of "$task_work/rollback/Sample.app")" = "0.0.1" ] || fail "回滚版本不符"
 codesign --verify --deep --strict "$task_work/rollback/Sample.app"
 echo "更新成功、校验和错误、缺附件、真实提前退出回滚全部通过"
+if [ -n "${FRIT_UPDATE_RESULT:-}" ]; then printf '%s\n' passed > "$FRIT_UPDATE_RESULT"; fi
+completed=true

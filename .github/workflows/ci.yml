@@ -67,7 +67,11 @@ jobs:
         run: bash Examples/UpdateSample/make-app.sh
       - name: Sample 实际更新与启动回滚
         timeout-minutes: 5
-        run: bash Tests/release/test-update.sh
+        run: |
+          result="$RUNNER_TEMP/frit-update.passed"
+          rm -f "$result"
+          FRIT_UPDATE_RESULT="$result" bash Tests/release/test-update.sh
+          test "$(cat "$result")" = passed
       - name: 发布逻辑与附件清单测试
         run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: 发布脚本自测
