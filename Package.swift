@@ -5,6 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "Frit",
+    defaultLocalization: "zh-Hans",
     platforms: [.macOS(.v13), .iOS(.v17)],
     products: [
         .library(name: "FritCore", targets: ["FritCore"]),
@@ -15,7 +16,10 @@ let package = Package(
         // 只依赖 Foundation 的纯逻辑，Linux 上也能编译和测试。
         .target(name: "FritCore"),
         .target(name: "FritSystem", dependencies: ["FritCore"]),
-        .target(name: "FritUpdate", dependencies: ["FritCore", "FritSystem"]),
+        .target(name: "FritUpdate", dependencies: ["FritCore", "FritSystem"], resources: [
+            .copy("Resources/Localizable.xcstrings"),
+            .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj"),
+        ]),
         .testTarget(name: "FritCoreTests", dependencies: ["FritCore"]),
         .testTarget(name: "FritSystemTests", dependencies: ["FritSystem"]),
         .testTarget(name: "FritUpdateTests", dependencies: ["FritUpdate"]),

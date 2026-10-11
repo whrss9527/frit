@@ -123,21 +123,21 @@ public enum UpdateError: LocalizedError, Equatable, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .server(let code): return "服务器返回了 \(code)"
-        case .badResponse: return "读不懂服务器返回的内容"
-        case .noArchive: return "这个版本没有可以直接安装和校验的附件，请到发布页手动下载"
-        case .checksumsMissing: return "校验文件里没有唯一的附件校验和"
-        case .checksumMismatch: return "下载的文件校验和不对，可能没下载完整或被篡改"
-        case .sizeMismatch: return "下载的文件大小不对"
-        case .extract(let reason): return "解压失败：\(reason)"
-        case .appNotFound: return "压缩包里没有可安装的 .app"
-        case .wrongApp(let reason): return "下载的程序不对：\(reason)"
+        case .server(let code): return updateText("服务器返回了 %lld", Int64(code))
+        case .badResponse: return updateText("读不懂服务器返回的内容")
+        case .noArchive: return updateText("这个版本没有可以直接安装和校验的附件，请到发布页手动下载")
+        case .checksumsMissing: return updateText("校验文件里没有唯一的附件校验和")
+        case .checksumMismatch: return updateText("下载的文件校验和不对，可能没下载完整或被篡改")
+        case .sizeMismatch: return updateText("下载的文件大小不对")
+        case .extract(let reason): return updateText("解压失败：%@", reason)
+        case .appNotFound: return updateText("压缩包里没有可安装的 .app")
+        case .wrongApp(let reason): return updateText("下载的程序不对：%@", reason)
         case .notInstallable(let reason): return reason
-        case .install(let reason): return "替换程序失败：\(reason)"
-        case .cancelledByUser: return "已取消授权，程序没有改动"
-        case .appManagement: return "macOS 不允许替换程序。到系统设置的隐私与安全性 → App 管理中允许后重试"
-        case .wrongSigner: return "新版本不是允许的开发者签名的，为了安全没有安装"
-        case .unsupportedChecks: return "此版本尚不支持要求的严格检查"
+        case .install(let reason): return updateText("替换程序失败：%@", reason)
+        case .cancelledByUser: return updateText("已取消授权，程序没有改动")
+        case .appManagement: return updateText("macOS 不允许替换程序。到系统设置的隐私与安全性 → App 管理中允许后重试")
+        case .wrongSigner: return updateText("新版本不是允许的开发者签名的，为了安全没有安装")
+        case .unsupportedChecks: return updateText("此版本尚不支持要求的严格检查")
         }
     }
 }
