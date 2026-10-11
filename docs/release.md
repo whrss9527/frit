@@ -69,6 +69,16 @@ A 和 B 填一组就行，两组都填时用 A。
 - 「检查签名」会列出每个包的版本和签名者；
 - 「提交苹果公证并钉上票据」通常几分钟，最后 `spctl` 显示 `source=Notarized Developer ID` 就成功了；没通过时会打印苹果给的公证日志，里面写着是哪个文件、什么原因。
 
+## 发版前的更新端到端验证
+
+App 的可复用工作流调用增加 `update-e2e-command: scripts/update-e2e.sh`，命令由 App 仓库提供。Frit 在签名、公证并生成校验和后、打标签发布前运行它；非零退出状态直接阻断发布。命令也会在 dry-run 中运行。
+
+命令可读取 `ARCHIVE_DIR`（最终归档目录）、`VERSION`（不含 v 的版本）、`SHA256SUMS_FILE`（完整校验和路径）和 `FRIT_RELEASE`（本次选用的发布脚本目录）。建议脚本先下载最新正式版，核对下载校验和及 Team ID，使用临时安装位置启动旧版，再将更新源指向本次构建，验证新进程启动和版本。
+
+需要 9.9.9 假更新源时，先在临时目录解压最终归档，调用 `"$FRIT_RELEASE/fake-release.sh" 临时目录/App.app App.zip`。这个脚本会复制 App、保留权限声明、修改副本版本，并使用工作流已导入的 `CODESIGN_IDENTITY` 和 `CODESIGN_KEYCHAIN` 重新签名；内部程序保持原签名，不会被统一重签。未提供签名身份时使用 ad-hoc 签名，仅适合流程测试。它以本地 HTTP 服务器提供 `latest.json`、`releases.json`、安装包和校验和。将其输出的 `FAKE_RELEASE_URL` 传给 App 的测试更新源配置，结束后停止 `FAKE_RELEASE_PID` 并清理测试安装。Proxi 的「旧正式版 → 9.9.9」测试可作为调用方实现参考。
+
+`fake-release.sh` 修改了 App，因此假更新包不保留原构建的公证票据。调用方应在临时测试安装中验证签名身份和更新流程，正式附件仍使用 `ARCHIVE_DIR` 中未经修改的归档。
+
 ## 要知道的几件事
 
 - **一键更新会认签名**：从第一个签名版开始，App 只安装同一个团队 ID 签名的新版本。之后不要再发 ad-hoc 签名的版本，不然签名版的用户没法一键更新。Secrets 失效时发布日志里会出现「没有配置 MACOS_CERTIFICATE_P12」的警告，看到它先别发。

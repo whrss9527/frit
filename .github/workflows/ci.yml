@@ -29,6 +29,8 @@ jobs:
         run: python3 -m unittest discover -s Tests/release -p 'test_assets.py'
       - name: changelog.sh 测试
         run: Tests/release/test-changelog.sh
+      - name: 更新验证入口测试
+        run: Tests/release/test-update-e2e.sh
 
   lint:
     name: shellcheck、actionlint
@@ -57,6 +59,8 @@ jobs:
         run: python3 -m unittest discover -s Tests/release -p 'test_assets.py'
       - name: 发布脚本自测
         run: Tests/release/test-scripts.sh
+      - name: 更新验证入口测试（macOS 自带的 bash 3.2）
+        run: Tests/release/test-update-e2e.sh
 
   release-dry-run:
     name: 发布流程试运行
@@ -75,5 +79,6 @@ jobs:
       extra-assets: dist/plugins.json
       asset-aliases: dist/Sample-macos.zip=dist/LegacySample-macos.zip
       test-command: ""
+      update-e2e-command: 'test -n "$VERSION" && test -s "$ARCHIVE_DIR/SHA256SUMS.txt" && test -s "$SHA256SUMS_FILE"'
       frit-ref: ${{ github.sha }}
       dry-run: true

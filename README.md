@@ -60,6 +60,10 @@ jobs:
 
 其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
 
+### 发版前验证更新
+
+调用方可设置 `update-e2e-command: scripts/update-e2e.sh`。命令在签名、公证、附件校验和完成后执行，可读取 `ARCHIVE_DIR`、`VERSION`、`SHA256SUMS_FILE` 和 `FRIT_RELEASE`；返回非零状态就停止，尚未打标签或发布。`dry-run` 同样执行这个命令。旧版下载、实际 App 启动与更新验证由调用方提供，接口约定见 [docs/release.md](docs/release.md)。
+
 ### 额外附件和归档别名
 
 ```yaml
@@ -91,6 +95,7 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 ```bash
 swift test                          # FritCore 单元测试（macOS 和 Linux）
 Tests/release/test-changelog.sh     # changelog.sh 测试（macOS 和 Linux）
+Tests/release/test-update-e2e.sh    # 更新验证入口、失败传播和工作流顺序（macOS 和 Linux）
 Tests/release/test-scripts.sh       # 发布脚本自测（macOS）：临时证书签名、精简包、假 xcrun 公证、假发布
 ```
 
