@@ -10,7 +10,7 @@ export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com GIT_COMMITTER_NAME
 fail() { echo "失败：$*"; exit 1; }
 pass() { echo "通过：$*"; }
 
-# 假的 gh：只认 release 的 view、create、edit、upload。
+# 假的 gh：release 的 view、create、edit、upload 和用于 latest 检查的分页 API。
 #   $FAKE_GH/state   none / draft / published
 #   $FAKE_GH/assets  已上传的文件名，一行一个
 #   $FAKE_GH/calls   调用记录
@@ -22,6 +22,15 @@ cat > "$fake/gh" <<'SH'
 set -euo pipefail
 dir="${FAKE_GH:?}"
 echo "gh $*" >> "$dir/calls"
+if [ "$1" = api ]; then
+  [ "${FAKE_GH_API_ERROR:-}" != 1 ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  if [ -f "$dir/releases.json" ]; then
+    cat "$dir/releases.json"
+  else
+    echo '[[]]'
+  fi
+  exit 0
+fi
 [ "$1" = release ] || { echo "fake gh: unexpected $*" >&2; exit 1; }
 cmd="$2"
 shift 3
@@ -77,6 +86,7 @@ echo zip > dist/App.zip
 echo sums > dist/SHA256SUMS.txt
 echo notes > "$work/notes.md"
 export APP_NAME=App ARCHIVES=dist/App.zip ARCHIVE_DIR=dist NOTES_FILE="$work/notes.md"
+export GITHUB_REPOSITORY=test/app
 
 out="$work/out"
 plan() { : > "$out"; GITHUB_OUTPUT="$out" "$release/plan.sh" > "$work/log" 2>&1; }
@@ -212,5 +222,22 @@ if grep -qE 'release (create|edit|upload)' "$FAKE_GH/calls"; then
 fi
 [ -z "$(output tag)" ] || fail "查询失败时不输出发布成功"
 pass "发布时查询失败不会创建或上传"
+
+# 抽取后的实际发布入口也必须保留 PR #25 的 latest 决策。
+reset_gh
+printf '[[{"tag_name":"v2.0.0","draft":false,"prerelease":false}]]\n' > "$FAKE_GH/releases.json"
+publish "$A" || { cat "$work/log"; fail "旧版补发"; }
+grep -q -- '--latest=false' "$FAKE_GH/calls" || fail "旧版补发不能抢占 latest"
+pass "实际发布脚本保留旧版不抢占 latest 的判断"
+reset_gh
+publish "$A" || { cat "$work/log"; fail "首次正式发布"; }
+grep -q -- '--latest=true' "$FAKE_GH/calls" || fail "首个正式版应成为 latest"
+pass "首个正式版标为 latest"
+reset_gh
+if FAKE_GH_API_ERROR=1 publish "$A"; then fail "分页查询失败应该阻止发布"; fi
+if grep -qE 'release (create|edit|upload)' "$FAKE_GH/calls"; then
+  fail "latest 查询失败后不能修改 Release"
+fi
+pass "latest 分页查询失败阻止修改 Release"
 
 echo "plan.sh、publish.sh 测试通过"

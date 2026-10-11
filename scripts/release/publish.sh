@@ -27,6 +27,12 @@ fi
 flags=()
 if [ "${PRERELEASE:-}" = "true" ]; then
   flags+=(--prerelease)
+else
+  # 保留 latest.py 的全部分页检查；抽成脚本后也不能让重打旧版抢占 latest。
+  release_list="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/frit-published-releases.XXXXXX")"
+  trap 'rm -f "$release_list"' EXIT
+  gh api --paginate --slurp "repos/${GITHUB_REPOSITORY:?没有设置 GITHUB_REPOSITORY}/releases?per_page=100" > "$release_list"
+  latest="$(python3 "$here/latest.py" "$TAG" < "$release_list")"
 fi
 if release_info "$TAG" >/dev/null; then
   gh release edit "$TAG" --notes-file "$NOTES_FILE"
@@ -48,7 +54,7 @@ gh release upload "$TAG" "${files[@]}" --clobber
 if [ "${PRERELEASE:-}" = "true" ]; then
   gh release edit "$TAG" --draft=false --prerelease
 else
-  gh release edit "$TAG" --draft=false --latest
+  gh release edit "$TAG" --draft=false --prerelease=false --latest="$latest"
 fi
 write_output tag "$TAG"
 echo "已发布到 https://github.com/${GITHUB_REPOSITORY:-}/releases/tag/${TAG}"
