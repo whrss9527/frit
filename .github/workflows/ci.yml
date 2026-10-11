@@ -12,6 +12,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 通过可复用工作流运行：推到 main 自动检查，版本标签会等待包含此矩阵的完整 CI。
+  downstream:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/downstream.yml
+    with:
+      frit-sha: ${{ github.sha }}
+
   linux:
     name: FritCore 测试、脚本检查（Linux）
     runs-on: ubuntu-latest

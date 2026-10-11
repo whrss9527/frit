@@ -74,6 +74,8 @@ jobs:
 
 其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
 
+升 Frit 次版本前必须通过一次四 App 下游矩阵。[downstream.yml](.github/workflows/downstream.yml) 可手动运行，也由完整 CI 在推送（含 main）时调用；版本标签等待包含矩阵的 CI。已接入的 App 使用当前 Frit 提交 SHA 编译、单测和更新 e2e，某列失败不会取消其他列。尚未声明 Frit Swift 包的 App 明确报告“未运行”，接入后自动生效，不能把该状态当成已验证。
+
 正式版发布前会比较仓库中全部已公开的正式版。只有更高的版本（或重新打包当前最高版本的原标签）才会标为 `latest`；重打包旧版会显式设置 `latest=false`。预发布和草稿不参与比较。正式版标签无法解析或 GitHub 列表读取失败时停止发布，避免错误地改变更新入口。
 
 ### 额外附件和归档别名
