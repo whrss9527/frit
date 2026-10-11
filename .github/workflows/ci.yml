@@ -18,49 +18,73 @@ jobs:
     container: swift:6.0-noble
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: 安装附件测试依赖
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3
       - name: 单元测试
         run: swift test
-      - name: 附件清单测试
-        run: python3 -m unittest discover -s Tests/release -p 'test_assets.py'
+      - name: 发布逻辑与附件清单测试
+        run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: changelog.sh 测试
         run: Tests/release/test-changelog.sh
       - name: 更新验证入口测试
         run: Tests/release/test-update-e2e.sh
+      - name: 签名团队与公证凭据逻辑测试
+        run: |
+          Tests/release/test-signature.sh
+          Tests/release/test-notary-credentials.sh
+      - name: Frit 版本标签测试
+        run: Tests/release/test-tag-version.sh
+      - name: 公证超时与重试逻辑测试
+        run: Tests/release/test-notarize.sh
+      - name: plan.sh、publish.sh 测试
+        run: Tests/release/test-publish.sh
+      - name: Frit 版本标签的 CI 门槛测试
+        run: Tests/release/test-tag-ci.sh
 
   lint:
     name: shellcheck、actionlint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: shellcheck
-        run: shellcheck -x scripts/release/*.sh Tests/release/*.sh
+        run: shellcheck -x scripts/release/*.sh scripts/ci/*.sh Tests/release/*.sh
       - name: actionlint
         run: |
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
-          ./actionlint -color
+          scripts/ci/install-actionlint.sh "$RUNNER_TEMP"
+          "$RUNNER_TEMP/actionlint" -color
 
   macos:
     name: 单元测试、发布脚本自测（macOS）
     runs-on: macos-15
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: 选择最新的 Xcode
         run: scripts/release/select-xcode.sh
       - name: 单元测试
         run: swift test
-      - name: 附件清单测试
-        run: python3 -m unittest discover -s Tests/release -p 'test_assets.py'
+      - name: 发布逻辑与附件清单测试
+        run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: 发布脚本自测
         run: Tests/release/test-scripts.sh
       - name: 更新验证入口测试（macOS 自带的 bash 3.2）
         run: Tests/release/test-update-e2e.sh
+      - name: 签名团队与公证凭据测试
+        run: |
+          Tests/release/test-signature.sh
+          Tests/release/test-notary-credentials.sh
+      - name: Frit 版本标签测试（macOS 自带的 bash 3.2）
+        run: Tests/release/test-tag-version.sh
+      - name: 公证超时与重试逻辑测试（macOS 自带的 bash 3.2）
+        run: Tests/release/test-notarize.sh
+      - name: plan.sh、publish.sh 测试（macOS 自带的 bash 3.2）
+        run: Tests/release/test-publish.sh
+      - name: Frit 版本标签的 CI 门槛测试
+        run: Tests/release/test-tag-ci.sh
 
   release-dry-run:
     name: 发布流程试运行
@@ -82,3 +106,4 @@ jobs:
       update-e2e-command: 'test -n "$VERSION" && test -s "$ARCHIVE_DIR/SHA256SUMS.txt" && test -s "$SHA256SUMS_FILE"'
       frit-ref: ${{ github.sha }}
       dry-run: true
+      require-notarization: false

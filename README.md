@@ -19,6 +19,20 @@ Frit 是玻璃熔块，做玻璃之前先烧好的基础原料。这几个 App �
 
 ## 发布流程
 
+### Frit 版本与引用
+
+Frit 使用 `主版本.次版本.修订号`。修订版修复问题；次版本增加功能；1.0 以后不兼容的公共 API 或工作流输入变更升级主版本。0.x 阶段的不兼容变更升级次版本，并在 CHANGELOG 注明。`Unreleased` 保存尚未发布的变更，新版本合入 main 且该提交的完整 CI 通过后，由 `tag-version.yml` 创建 `v<版本>`，已有标签不会移动。手动运行也检查该提交的 CI；首次启用该工作流时创建当前的 `v0.1.0`。
+
+Swift 包按版本引用，例如：
+
+```swift
+.package(url: "https://github.com/whrss9527/frit.git", .upToNextMinor(from: "0.1.0"))
+```
+
+0.x 阶段用 `upToNextMinor` 避免自动升级到可能破坏兼容性的次版本，并提交 `Package.resolved`。1.0 以后可用 `from:` 接收同一主版本内的兼容更新。
+
+可复用工作流使用版本标签或完整提交 SHA，`uses: …@<ref>` 与 `frit-ref: <ref>` 必须相同。正式发版仍使用默认 `frit-ref: main` 会收到警告；框架无法从调用方的 GitHub 上下文可靠推断可复用工作流的引用。
+
 在 App 仓库里加一个工作流，比如 `.github/workflows/release.yml`：
 
 ```yaml
@@ -44,7 +58,15 @@ jobs:
       build-command: UNIVERSAL=1 scripts/build-app.sh && cd dist && ditto -c -k --keepParent Stox.app Stox.zip
       archives: dist/Stox.zip
       frit-ref: <和上面同一个提交或标签>
-    secrets: inherit
+    secrets:
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+      NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+      NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+      NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
 ```
 
 要发新版本时，在 CHANGELOG.md 最上面加一节（`## 0.46.0` 或 `## 0.46.0（2026-10-01）`）推到 main；CI 通过后，发现这个版本还没有标签，就自动打标签、打包、签名、公证并发布。
@@ -58,7 +80,9 @@ jobs:
 | `CODESIGN_IDENTITY`、`CODESIGN_KEYCHAIN`、`CODESIGN_NAME` | 配了证书时有值，签名用；没有时 ad-hoc 签名 |
 | `FRIT_RELEASE` | Frit 发布脚本所在的目录，可以直接调用 `"$FRIT_RELEASE/sign.sh"`、`"$FRIT_RELEASE/thin-archives.sh"` |
 
-其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
+其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。0.2.0 起默认要求公证；只有开发自测才显式设 `require-notarization: false`。正式发布建议设置 `team-id` 为证书的 10 位团队 ID；每个归档的签名必须匹配。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
+
+正式版发布前会比较仓库中全部已公开的正式版。只有更高的版本（或重新打包当前最高版本的原标签）才会标为 `latest`；重打包旧版会显式设置 `latest=false`。预发布和草稿不参与比较。正式版标签无法解析或 GitHub 列表读取失败时停止发布，避免错误地改变更新入口。
 
 ### 发版前验证更新
 
@@ -86,7 +110,10 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 | `notarize.sh` | 提交公证、等结果、钉票据、重新打包；没通过时打印苹果的日志 |
 | `thin-archives.sh` | 从通用二进制的 .app 打出 arm64、x86_64 两个精简包，重新签名 |
 | `assets.sh` | 公证后复制别名，生成附件清单和校验和 |
+| `plan.sh` | 判断是否发版；草稿或缺附件时在标签对应的提交上补发 |
+| `publish.sh` | 发布前核对标签与构建提交，上传全部附件后公开 Release |
 | `changelog.sh` | 读 CHANGELOG.md 最上面的版本、取某个版本的一节 |
+| `latest.py` | 比较全部正式版，防止重新打包旧版后 latest 倒退 |
 | `fake-release.sh` | 更新端到端测试用：把 .app 改成 9.9.9，用本地 HTTP 服务器提供 GitHub 格式的 latest.json 和安装包 |
 | `select-xcode.sh` | 在 GitHub 的 macOS runner 上切到最新的正式版 Xcode |
 
@@ -94,8 +121,11 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 
 ```bash
 swift test                          # FritCore 单元测试（macOS 和 Linux）
+python3 -m unittest discover -s Tests/release -p 'test_*.py' # 发布逻辑和附件清单测试
 Tests/release/test-changelog.sh     # changelog.sh 测试（macOS 和 Linux）
 Tests/release/test-update-e2e.sh    # 更新验证入口、失败传播和工作流顺序（macOS 和 Linux）
+Tests/release/test-notarize.sh      # 公证超时与重试逻辑（替身命令，macOS 和 Linux）
+Tests/release/test-publish.sh       # 发布竞态、失败恢复与附件完整性（macOS 和 Linux）
 Tests/release/test-scripts.sh       # 发布脚本自测（macOS）：临时证书签名、精简包、假 xcrun 公证、假发布
 ```
 
