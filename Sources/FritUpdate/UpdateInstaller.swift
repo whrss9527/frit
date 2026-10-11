@@ -19,13 +19,12 @@ public enum UpdateInstaller {
         defer { session.finishTasksAndInvalidate() }
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        let task = session.downloadTask(with: request)
         try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                delegate.begin(continuation)
-                session.downloadTask(with: request).resume()
-            }
+            task.resume()
+            try await delegate.completion.value()
         } onCancel: {
-            session.invalidateAndCancel()
+            task.cancel()
         }
     }
 
@@ -179,23 +178,15 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
     let destination: URL
     let expectedSize: Int?
     let progress: @Sendable (Double?) -> Void
-    private let lock = NSLock()
-    private var completion: CheckedContinuation<Void, Error>?
+    let completion = AsyncResponse<Void>()
 
     init(destination: URL, expectedSize: Int?, progress: @escaping @Sendable (Double?) -> Void) {
         self.destination = destination
         self.expectedSize = expectedSize
         self.progress = progress
     }
-    func begin(_ continuation: CheckedContinuation<Void, Error>) {
-        lock.lock(); completion = continuation; lock.unlock()
-    }
     private func finish(_ result: Result<Void, Error>) {
-        lock.lock()
-        let continuation = completion
-        completion = nil
-        lock.unlock()
-        continuation?.resume(with: result)
+        completion.resolve(result)
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
                     totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {

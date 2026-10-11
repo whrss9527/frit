@@ -12,26 +12,25 @@ release="${FRIT_RELEASE:-$here/../../scripts/release}"
 work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/frit-sample"
 rm -rf "$work" && mkdir -p "$work" "$out"
 
-cat > "$work/main.swift" <<'SWIFT'
-import AppKit
-print("Sample \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") ?? "?") 已启动")
-if CommandLine.arguments.contains("--exit") { exit(0) }
-NSApplication.shared.setActivationPolicy(.accessory)
-NSApplication.shared.run()
-SWIFT
+sample_package="$here/../../Examples/UpdateE2ESample"
+swift build --package-path "$sample_package" --scratch-path "$work/build" --configuration release \
+  --arch arm64 --arch x86_64 --product Sample
+sample_bin=$(swift build --package-path "$sample_package" --scratch-path "$work/build" \
+  --configuration release --arch arm64 --arch x86_64 --show-bin-path)
 cat > "$work/helper.swift" <<'SWIFT'
 print("helper")
 SWIFT
 
 for arch in arm64 x86_64; do
-  swiftc -O -target "${arch}-apple-macos13" "$work/main.swift" -o "$work/Sample-$arch"
   swiftc -O -target "${arch}-apple-macos13" "$work/helper.swift" -o "$work/helper-$arch"
 done
 
 app="$out/Sample.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
-lipo -create -output "$app/Contents/MacOS/Sample" "$work/Sample-arm64" "$work/Sample-x86_64"
+cp "$sample_bin/Sample" "$app/Contents/MacOS/Sample"
+mkdir -p "$app/Contents/Resources"
+ditto "$sample_bin/Frit_FritUpdate.bundle" "$app/Contents/Resources/Frit_FritUpdate.bundle"
 lipo -create -output "$app/Contents/MacOS/sample-helper" "$work/helper-arm64" "$work/helper-x86_64"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
