@@ -12,7 +12,7 @@ UpdateSection(updater: updater, pageURLOpener: { NSWorkspace.shared.open($0) })
 
 App 改界面语言时设置 `FritLocalization.languageOverride = "en"` 或 `"zh-Hans"`，跟随系统时设为 nil。钩子位于 FritCore，线程安全；视图观察变化，在运行时重选模块 lproj。不会更改 AppleLanguages，不依赖 Foundation 缓存失效；`en-US` 会回退到 en。日期使用对应 Locale，错误描述每次读取都按当前语言生成。
 
-文案唯一来源为 `Sources/FritUpdate/Resources/Localizable.xcstrings`，源语言 zh-Hans，提供 en。为兼容命令行 SwiftPM，`scripts/generate-localizations.py` 同步产生两份 lproj/Localizable.strings；catalog 原样随模块复制，字符串用 `String(localized:bundle: .module)` 或显式覆盖的模块语言包读取。改文案后运行生成脚本；`--check` 校验代码键、两种译文、占位符和生成结果，CI 会检查。
+文案唯一来源为 `Sources/FritUpdate/Resources/Localizable.xcstrings`，源语言 zh-Hans，提供 en。`scripts/generate-localizations.py` 同步产生两份 lproj/Localizable.strings；catalog 作为编写源排除出构建，避免 Xcode 同时编译它和生成资源造成重复输出。字符串用 `String(localized:bundle: .module)` 或显式覆盖的模块语言包读取，原生 SwiftPM 与 Xcode 后端使用同一份译文。改文案后运行生成脚本；`--check` 校验代码键、两种译文、占位符和生成结果，CI 会检查。
 
 ## 预览 Sample.app
 
