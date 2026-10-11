@@ -15,7 +15,7 @@ Frit 是玻璃熔块，做玻璃之前先烧好的基础原料。这几个 App �
 | `FritSystem` | 全局快捷键和录制控件、登录时启动、通知、权限、日志 | 计划中 |
 | `FritSync` | iCloud 云盘文件同步 | 计划中 |
 
-模块按功能平铺，统一用 `Frit` 前缀。同时支持 macOS 13 和 iOS 17，只在 macOS 上有意义的模块（一键更新、全局快捷键这些）在 iOS 上编译为空。
+模块按功能平铺，统一用 `Frit` 前缀。当前的 FritCore 支持 macOS 13 和 iOS 17，CI 在 Linux/macOS 跑测试，并用 `xcodebuild -destination generic/platform=iOS` 编译验证。后续只在 macOS 上有意义的模块（一键更新、全局快捷键这些）将隔离平台实现。
 
 ## 发布流程
 
