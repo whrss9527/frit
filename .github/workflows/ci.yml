@@ -71,6 +71,10 @@ jobs:
         run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: 发布脚本自测
         run: Tests/release/test-scripts.sh
+      - name: 编译 iOS 17 支持的 FritCore
+        run: >-
+          xcodebuild -scheme FritCore -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/frit-ios" CODE_SIGNING_ALLOWED=NO build
       - name: 更新验证入口测试（macOS 自带的 bash 3.2）
         run: Tests/release/test-update-e2e.sh
       - name: 签名团队与公证凭据测试
@@ -107,3 +111,18 @@ jobs:
       frit-ref: ${{ github.sha }}
       dry-run: true
       require-notarization: false
+
+  release-dry-run-output:
+    name: 试运行不输出已发布标签
+    needs: release-dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 检查可复用工作流的真实输出
+        env:
+          PUBLISHED_TAG: ${{ needs.release-dry-run.outputs.tag }}
+        run: |
+          if [ -n "$PUBLISHED_TAG" ]; then
+            echo "::error::试运行不应输出已发布标签：$PUBLISHED_TAG"
+            exit 1
+          fi
