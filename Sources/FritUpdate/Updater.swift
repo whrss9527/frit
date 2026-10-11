@@ -36,7 +36,7 @@ public final class Updater: ObservableObject {
     private var installTask: Task<Void, Never>?
     private var notesTask: Task<Void, Never>?
     private var automaticTask: Task<Void, Never>?
-    private var activeSessions: [UUID: URLSession] = [:]
+    private var activeRequests: [UUID: URLSessionTask] = [:]
     private var generation = 0
     private var beforeCheck: Phase = .idle
     private var isPreview = false
@@ -200,8 +200,8 @@ public final class Updater: ObservableObject {
     public func install() {
         guard !isPreview else { return }
         guard let item = candidate, !isInstalling, installTask == nil else { return }
-        if let problem = installProblem { phase = .failed(item, .notInstallable(problem)); return }
-        guard item.canInstall else { phase = .failed(item, .noArchive); return }
+        if let problem = installProblem { lastFailure = .notInstallable(problem); phase = .failed(item, .notInstallable(problem)); return }
+        guard item.canInstall else { lastFailure = .noArchive; phase = .failed(item, .noArchive); return }
         generation += 1
         let token = generation
         lastFailure = nil
@@ -231,7 +231,7 @@ public final class Updater: ObservableObject {
         installTask?.cancel()
         installTask = nil
         notesTask?.cancel()
-        for session in activeSessions.values { session.invalidateAndCancel() }
+        for task in activeRequests.values { task.cancel() }
         phase = item.map(Phase.available) ?? beforeCheck
     }
     public func checkAndInstall() async {
@@ -260,15 +260,24 @@ public final class Updater: ObservableObject {
             route = config.routeName(url, index)
             let session = URLSession(configuration: options)
             let id = UUID()
-            activeSessions[id] = session
-            defer { activeSessions[id] = nil; session.invalidateAndCancel() }
+            defer { activeRequests[id] = nil; session.invalidateAndCancel() }
             var request = URLRequest(url: url)
             request.timeoutInterval = 30
             request.cachePolicy = .reloadIgnoringLocalCacheData
             request.setValue(config.userAgent, forHTTPHeaderField: "User-Agent")
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            let completion = AsyncResponse<(Data, URLResponse)>()
+            let task = session.dataTask(with: request) { data, response, error in
+                if let error { completion.resolve(.failure(error)) }
+                else if let data, let response { completion.resolve(.success((data, response))) }
+                else { completion.resolve(.failure(UpdateError.badResponse)) }
+            }
+            activeRequests[id] = task
             do {
-                let (data, response) = try await session.data(for: request)
+                let (data, response) = try await withTaskCancellationHandler {
+                    task.resume()
+                    return try await completion.value()
+                } onCancel: { task.cancel() }
                 if let response = response as? HTTPURLResponse, !(200..<300).contains(response.statusCode) { throw UpdateError.server(response.statusCode) }
                 return data
             } catch {

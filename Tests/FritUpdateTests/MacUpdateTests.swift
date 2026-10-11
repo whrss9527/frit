@@ -313,13 +313,28 @@ final class MacUpdateTests: XCTestCase {
         XCTAssertNotNil(updater.checkError)
         guard case .available = updater.phase else { return XCTFail("检查失败应保留上次版本") }
         setenv(f.prefix + "_UPDATE_URL", f.base.appendingPathComponent("slow").absoluteString, 1)
-        let check = Task { await updater.check(manual: true) }
-        while updater.phase != .checking { await Task.yield() }
-        updater.cancel()
-        let cancelled = await check.value
-        XCTAssertNil(cancelled)
+        // 取消可以发生在第一次挂起后、请求还没有交给 Foundation 的时刻。
+        for _ in 0..<20 {
+            let check = Task { await updater.check(manual: true) }
+            while updater.phase != .checking { await Task.yield() }
+            updater.cancel()
+            let cancelled = await check.value
+            XCTAssertNil(cancelled)
+        }
         guard case .available = updater.phase else { return XCTFail("取消应恢复之前状态") }
         XCTAssertNil(updater.checkError)
+    }
+
+    func testMissingAssetsReportsFailureWithoutChangingCurrentApp() async throws {
+        let f = try UpdateFixture(); defer { f.cleanup() }
+        try await f.makeApp(at: f.target, version: "1.0.0")
+        let release: [String: Any] = ["tag_name": "v2.0.0", "html_url": f.feed.absoluteString, "assets": []]
+        try JSONSerialization.data(withJSONObject: release).write(to: f.root.appendingPathComponent("latest.json"))
+        let updater = Updater(configuration: f.configuration())
+        await updater.checkAndInstall()
+        XCTAssertEqual(updater.lastFailure, .noArchive)
+        guard case .failed(_, .noArchive) = updater.phase else { return XCTFail("\(updater.phase)") }
+        XCTAssertTrue(CodeSignature.satisfies(f.target, requirement: nil))
     }
 
     func testFinishPreviousUpdateReturnsRejectedVersionAndCleansOwnDirectories() async throws {
