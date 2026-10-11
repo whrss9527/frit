@@ -140,6 +140,9 @@ jobs:
           repository: whrss9527/Frit
           ref: ${{ inputs.frit-ref }}
           path: .frit
+      - name: 检查 Frit 版本引用
+        if: ${{ !inputs.dry-run && inputs.frit-ref == 'main' }}
+        run: echo "::warning::frit-ref 仍是 main。正式发版请把 uses 的引用和 frit-ref 都固定到同一个 Frit 标签或完整提交 SHA。"
       - name: 看要不要发版
         id: plan
         env:
