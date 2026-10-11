@@ -25,12 +25,14 @@ jobs:
           apt-get install -y --no-install-recommends python3
       - name: 单元测试
         run: swift test
-      - name: 附件清单测试
-        run: python3 -m unittest discover -s Tests/release -p 'test_assets.py'
+      - name: 发布逻辑与附件清单测试
+        run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: changelog.sh 测试
         run: Tests/release/test-changelog.sh
       - name: 公证超时与重试逻辑测试
         run: Tests/release/test-notarize.sh
+      - name: plan.sh、publish.sh 测试
+        run: Tests/release/test-publish.sh
 
   lint:
     name: shellcheck、actionlint
@@ -55,12 +57,14 @@ jobs:
         run: scripts/release/select-xcode.sh
       - name: 单元测试
         run: swift test
-      - name: 附件清单测试
-        run: python3 -m unittest discover -s Tests/release -p 'test_assets.py'
+      - name: 发布逻辑与附件清单测试
+        run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: 发布脚本自测
         run: Tests/release/test-scripts.sh
       - name: 公证超时与重试逻辑测试（macOS 自带的 bash 3.2）
         run: Tests/release/test-notarize.sh
+      - name: plan.sh、publish.sh 测试（macOS 自带的 bash 3.2）
+        run: Tests/release/test-publish.sh
 
   release-dry-run:
     name: 发布流程试运行
