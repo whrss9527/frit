@@ -1,6 +1,6 @@
 # 最小 FritSystem
 
-0.2.0 提供 FritUpdate 需要的 Shell、Relauncher 和 FileLog。macOS 可用全部 API；Linux 编译 Shell、文件日志和回滚脚本测试；iOS 暂时编译为空模块。
+变更先记在 Unreleased，随下一次 0.2.0 定版提供 FritUpdate 需要的 Shell、Relauncher 和 FileLog。macOS 可用全部 API；Linux 编译 Shell、文件日志和回滚脚本测试；iOS 暂时编译为空模块。
 
 ## Shell
 
