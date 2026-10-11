@@ -18,6 +18,10 @@ SH
 chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
 export GITHUB_REPOSITORY=test/frit
+# 用自己的临时仓库模拟被检查的 main 提交，避免容器用户与工作区所有者不同。
+git init -q "$work/repo"
+cd "$work/repo"
+git -c user.name=test -c user.email=test@example.invalid commit -q --allow-empty -m fixture
 FRIT_TEST_SHA="$(git rev-parse HEAD)"
 export FRIT_TEST_SHA
 
