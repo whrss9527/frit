@@ -1,6 +1,6 @@
 # 公共更新逻辑
 
-FritCore 只依赖 Foundation，支持 Linux、macOS 13 和 iOS 17。这里的 API 在 0.2.0 加入；0.1.0 的边界仍只有 `AppVersion` 和已有发布流程。
+FritCore 只依赖 Foundation，支持 Linux、macOS 13 和 iOS 17。这里的 API 记在 Unreleased，随下一次 0.2.0 定版加入；0.1.0 标签的边界仍只有 `AppVersion` 和已有发布流程。
 
 ## 发布、通道和附件
 

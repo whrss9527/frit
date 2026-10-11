@@ -2,7 +2,7 @@ import XCTest
 @testable import FritCore
 
 final class UpdateCoreTests: XCTestCase {
-    private let hash = String(repeating: "a", count: 64)
+    private let sampleSHA256 = String(repeating: "a", count: 64)
     private let repository = "whrss9527/pop"
 
     private func release(_ tag: String, prerelease: Bool = false, draft: Bool = false,
@@ -96,14 +96,14 @@ final class UpdateCoreTests: XCTestCase {
         XCTAssertTrue(UpdateCandidate(release: item, naming: .versioned(prefix: "Pop-"), architecture: .arm64, publishedBy: repository).canInstall)
         let bare = release("v0.3.0", names: ["Pop-VERSION.zip"])
         XCTAssertFalse(UpdateCandidate(release: bare, naming: .versioned(prefix: "Pop-"), architecture: .arm64, publishedBy: repository).canInstall)
-        let archive = GitHubRelease.Asset(name: "Stox.zip", downloadURL: URL(string: "https://github.com/x")!, digest: "sha256:" + hash)
+        let archive = GitHubRelease.Asset(name: "Stox.zip", downloadURL: URL(string: "https://github.com/x")!, digest: "sha256:" + sampleSHA256)
         XCTAssertTrue(UpdateCandidate(release: item, archive: archive, checksums: nil).canInstall)
         XCTAssertFalse(UpdateCandidate(release: item, archive: nil, checksums: item.assets.last).canInstall)
     }
 
     func testForeignSameNameCannotShadowOwnedAsset() {
         let good = release("v0.3.0")
-        let bad = GitHubRelease.Asset(name: "Pop-0.3.0.zip", downloadURL: URL(string: "https://evil.example/Pop-0.3.0.zip")!, digest: "sha256:" + hash)
+        let bad = GitHubRelease.Asset(name: "Pop-0.3.0.zip", downloadURL: URL(string: "https://evil.example/Pop-0.3.0.zip")!, digest: "sha256:" + sampleSHA256)
         let item = GitHubRelease(tagName: good.tagName, htmlURL: good.htmlURL, assets: [bad] + good.assets)
         let candidate = UpdateCandidate(release: item, naming: .versioned(prefix: "Pop-"), architecture: .arm64, publishedBy: repository)
         XCTAssertEqual(candidate.archive, good.assets.first)
@@ -119,14 +119,14 @@ final class UpdateCoreTests: XCTestCase {
     /// Stox、Pop、Proxi 的 shasum 样本，加上 Meno 的歧义拒绝行为。
     func testChecksumsParsing() {
         let other = String(repeating: "B", count: 64)
-        let parsed = Checksums.parse("\(hash)  Pop-0.3.0.zip\n\(other) *Pop 0.3.0.zip\nbad line\n1234  short.zip\n")
-        XCTAssertEqual(parsed, ["Pop-0.3.0.zip": hash, "Pop 0.3.0.zip": other.lowercased()])
+        let parsed = Checksums.parse("\(sampleSHA256)  Pop-0.3.0.zip\n\(other) *Pop 0.3.0.zip\nbad line\n1234  short.zip\n")
+        XCTAssertEqual(parsed, ["Pop-0.3.0.zip": sampleSHA256, "Pop 0.3.0.zip": other.lowercased()])
         XCTAssertEqual(Checksums.parse("说明行\n0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0  Proxi-macos.zip\nDEADBEEF 太短的\n5891B5B522D5DF086D0FF0B110FBD9D21BB4FC7163AF34D08286A2E846F6BE03 *hello.txt"), [
             "Proxi-macos.zip": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
             "hello.txt": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
         ])
-        XCTAssertNil(Checksums.parse("\(hash)  Meno.zip\n\(other)  Meno.zip\n\(hash)  Meno.zip")["Meno.zip"])
-        XCTAssertEqual(Checksums.parse("\(hash)\t*Meno.zip\r\n\(hash)  Meno.zip")["Meno.zip"], hash)
+        XCTAssertNil(Checksums.parse("\(sampleSHA256)  Meno.zip\n\(other)  Meno.zip\n\(sampleSHA256)  Meno.zip")["Meno.zip"])
+        XCTAssertEqual(Checksums.parse("\(sampleSHA256)\t*Meno.zip\r\n\(sampleSHA256)  Meno.zip")["Meno.zip"], sampleSHA256)
     }
 
     func testReleaseRangeExcludesDraftsAndPrereleases() {
