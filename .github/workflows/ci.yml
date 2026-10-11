@@ -35,6 +35,8 @@ jobs:
         run: Tests/release/test-notarize.sh
       - name: plan.sh、publish.sh 测试
         run: Tests/release/test-publish.sh
+      - name: Frit 版本标签的 CI 门槛测试
+        run: Tests/release/test-tag-ci.sh
 
   lint:
     name: shellcheck、actionlint
@@ -69,6 +71,8 @@ jobs:
         run: Tests/release/test-notarize.sh
       - name: plan.sh、publish.sh 测试（macOS 自带的 bash 3.2）
         run: Tests/release/test-publish.sh
+      - name: Frit 版本标签的 CI 门槛测试
+        run: Tests/release/test-tag-ci.sh
 
   release-dry-run:
     name: 发布流程试运行
