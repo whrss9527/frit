@@ -9,6 +9,7 @@ Frit 的版本号和发布说明。App 仓库在 `uses:` 里写的 `@` 后面可
 - FritCore 加入公共更新逻辑：GitHub 发布与列表、正式版和测试版通道、四种附件命名、校验和、安装位置、双语发布说明和跨版本更新说明。
 - 从 Meno 原样迁入 `TolerantJSON`、`LossyArray`，为后续设置与同步迁移保留容错解码行为。
 - 最小 FritSystem：后台进程运行与超时、保留旧副本的重启回滚、可脱敏和设置消息前缀的文件日志。
+- FritCore 加入公共快捷键模型、ANSI 键名、最低修饰键要求和 macOS 15 的 Option 限制；读取旧 Carbon 位、Meno 紧凑位和带 display 的旧设置。
 
 ## 0.1.0
 

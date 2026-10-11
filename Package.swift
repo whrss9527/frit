@@ -14,7 +14,7 @@ let package = Package(
         // 只依赖 Foundation 的纯逻辑，Linux 上也能编译和测试。
         .target(name: "FritCore"),
         .target(name: "FritSystem", dependencies: ["FritCore"]),
-        .testTarget(name: "FritCoreTests", dependencies: ["FritCore"]),
+        .testTarget(name: "FritCoreTests", dependencies: ["FritCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "FritSystemTests", dependencies: ["FritSystem"]),
     ]
 )

@@ -111,6 +111,8 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 
 最小系统模块的线程、日志和重启约定见 [docs/system.md](docs/system.md)。
 
+快捷键模型的旧设置格式和最低修饰键要求见 [docs/key-combo.md](docs/key-combo.md)。
+
 ```bash
 swift test                          # FritCore 单元测试（macOS 和 Linux）
 python3 -m unittest discover -s Tests/release -p 'test_*.py' # 发布逻辑和附件清单测试
