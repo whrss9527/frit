@@ -60,6 +60,8 @@ jobs:
 
 其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
 
+正式版发布前会比较仓库中全部已公开的正式版。只有更高的版本（或重新打包当前最高版本的原标签）才会标为 `latest`；重打包旧版会显式设置 `latest=false`。预发布和草稿不参与比较。正式版标签无法解析或 GitHub 列表读取失败时停止发布，避免错误地改变更新入口。
+
 ### 额外附件和归档别名
 
 ```yaml
@@ -82,7 +84,10 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 | `notarize.sh` | 提交公证、等结果、钉票据、重新打包；没通过时打印苹果的日志 |
 | `thin-archives.sh` | 从通用二进制的 .app 打出 arm64、x86_64 两个精简包，重新签名 |
 | `assets.sh` | 公证后复制别名，生成附件清单和校验和 |
+| `plan.sh` | 判断是否发版；草稿或缺附件时在标签对应的提交上补发 |
+| `publish.sh` | 发布前核对标签与构建提交，上传全部附件后公开 Release |
 | `changelog.sh` | 读 CHANGELOG.md 最上面的版本、取某个版本的一节 |
+| `latest.py` | 比较全部正式版，防止重新打包旧版后 latest 倒退 |
 | `fake-release.sh` | 更新端到端测试用：把 .app 改成 9.9.9，用本地 HTTP 服务器提供 GitHub 格式的 latest.json 和安装包 |
 | `select-xcode.sh` | 在 GitHub 的 macOS runner 上切到最新的正式版 Xcode |
 
@@ -90,7 +95,10 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 
 ```bash
 swift test                          # FritCore 单元测试（macOS 和 Linux）
+python3 -m unittest discover -s Tests/release -p 'test_*.py' # 发布逻辑和附件清单测试
 Tests/release/test-changelog.sh     # changelog.sh 测试（macOS 和 Linux）
+Tests/release/test-notarize.sh      # 公证超时与重试逻辑（替身命令，macOS 和 Linux）
+Tests/release/test-publish.sh       # 发布竞态、失败恢复与附件完整性（macOS 和 Linux）
 Tests/release/test-scripts.sh       # 发布脚本自测（macOS）：临时证书签名、精简包、假 xcrun 公证、假发布
 ```
 
