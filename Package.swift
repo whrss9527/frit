@@ -5,13 +5,23 @@ import PackageDescription
 
 let package = Package(
     name: "Frit",
+    defaultLocalization: "zh-Hans",
     platforms: [.macOS(.v13), .iOS(.v17)],
     products: [
         .library(name: "FritCore", targets: ["FritCore"]),
+        .library(name: "FritSystem", targets: ["FritSystem"]),
+        .library(name: "FritUpdate", targets: ["FritUpdate"]),
     ],
     targets: [
         // 只依赖 Foundation 的纯逻辑，Linux 上也能编译和测试。
         .target(name: "FritCore"),
+        .target(name: "FritSystem", dependencies: ["FritCore"]),
+        // 文案源由生成器处理；Xcode 后端不能同时编译 catalog 和生成的 strings。
+        .target(name: "FritUpdate", dependencies: ["FritCore", "FritSystem"], exclude: ["Resources/Localizable.xcstrings"], resources: [
+            .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj"),
+        ]),
         .testTarget(name: "FritCoreTests", dependencies: ["FritCore"]),
+        .testTarget(name: "FritSystemTests", dependencies: ["FritSystem"]),
+        .testTarget(name: "FritUpdateTests", dependencies: ["FritUpdate"]),
     ]
 )

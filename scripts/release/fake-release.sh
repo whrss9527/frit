@@ -31,9 +31,10 @@ rm -rf "$dir" && mkdir -p "$dir/stage"
 ditto "$app" "$dir/stage/$app_name"
 # 从原始 App 读取权限声明，只重签修改过 Info.plist 的外层 App。
 # 内部辅助程序和框架保持原来的签名及各自的权限声明。
-codesign -d --entitlements - "$app" > "$dir/entitlements.plist" 2>/dev/null
+codesign -d --entitlements - --xml "$app" > "$dir/entitlements.plist" 2>/dev/null
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$dir/stage/$app_name/Contents/Info.plist"
 if [ -s "$dir/entitlements.plist" ]; then
+  plutil -lint "$dir/entitlements.plist" >/dev/null
   "$release/sign.sh" "$dir/stage/$app_name" "$dir/entitlements.plist"
 else
   "$release/sign.sh" "$dir/stage/$app_name"
