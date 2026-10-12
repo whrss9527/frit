@@ -148,10 +148,10 @@ jobs:
       tag: ${{ steps.plan.outputs.tag }}
       sha: ${{ steps.plan.outputs.sha }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: whrss9527/Frit
           ref: ${{ inputs.frit-ref }}
@@ -193,12 +193,12 @@ jobs:
       EXTRA_ASSETS: ${{ inputs.extra-assets }}
       ASSET_ALIASES: ${{ inputs.asset-aliases }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.plan.outputs.sha }}
           # BUILD_NUMBER 用提交数，要完整历史。
           fetch-depth: 0
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: whrss9527/Frit
           ref: ${{ inputs.frit-ref }}
@@ -301,7 +301,7 @@ jobs:
         run: .frit/scripts/release/update-e2e.sh
       - name: 上传到这次运行的附件（试运行）
         if: inputs.dry-run
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-dry-run
           path: |
