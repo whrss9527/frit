@@ -3,7 +3,7 @@
 #   1. 用临时的自签名证书走一遍导入钥匙串、由内向外签名、hardened runtime、安全时间戳；
 #   2. 精简包：两种芯片各一个，里面的程序只剩一种芯片，签名有效；
 #   3. 公证脚本：用假的 xcrun 走一遍通过、没通过、等超时、没有凭据，以及钉票据后系统检查的重试和兜底；
-#   4. 假发布：latest.json 能访问，下载的包校验和对得上，里面是 9.9.9。
+#   4. 假发布：latest.json 能访问，下载的包校验和对得上，里面是 9.9.9，证书和权限声明不变。
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 release="$(cd "$here/../../scripts/release" && pwd)"
@@ -174,6 +174,14 @@ rm -rf "$work/fake-unzipped" && ditto -x -k "$work/downloaded.zip" "$work/fake-u
 [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$work/fake-unzipped/Sample.app/Contents/Info.plist")" = "9.9.9" ] \
   || { echo "假发布里的版本不是 9.9.9"; exit 1; }
 codesign --verify --deep --strict "$work/fake-unzipped/Sample.app"
+for code in "$work/fake-unzipped/Sample.app" "$work/fake-unzipped/Sample.app/Contents/MacOS/sample-helper"; do
+  codesign -dvv "$code" 2>&1 | grep -q "Authority=Frit CI Test" || { echo "假发布丢失了证书签名"; exit 1; }
+done
+codesign -d --entitlements - "$work/fake-unzipped/Sample.app" 2>/dev/null | grep -q "automation.apple-events" \
+  || { echo "假发布丢失了 App 权限声明"; exit 1; }
+if codesign -d --entitlements - "$work/fake-unzipped/Sample.app/Contents/MacOS/sample-helper" 2>/dev/null | grep -q "automation.apple-events"; then
+  echo "假发布把 App 的权限声明带给了辅助程序"; exit 1
+fi
 curl -sSf "http://127.0.0.1:8799/releases.json" | python3 -c 'import json,sys; assert json.load(sys.stdin)[0]["tag_name"] == "v9.9.9"'
 kill "$pid"
 echo "假发布通过"
