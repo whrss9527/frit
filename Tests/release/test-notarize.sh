@@ -16,10 +16,18 @@ cat > "$fake/command" <<'SH'
 #!/bin/bash
 set -euo pipefail
 tool="$(basename "$0")"
-printf '%s\n' "$tool $*" >> "$FAKE_NOTARY_CALLS"
+if [ "$tool" = security ]; then
+  printf '%s\n' "$tool $1" >> "$FAKE_NOTARY_CALLS"
+else
+  printf '%s\n' "$tool $*" >> "$FAKE_NOTARY_CALLS"
+fi
 case "$tool" in
   xcrun)
     case "$1 $2" in
+      "notarytool store-credentials")
+        IFS= read -r password
+        [ "$password" = test-only ] || exit 99
+        ;;
       "notarytool submit") printf '{"id":"test-submission"}\n' ;;
       "notarytool wait")
         timeout=""
@@ -64,12 +72,12 @@ case "$tool" in
       exit 99
     fi
     ;;
-  sleep|syspolicy_check) ;;
+  security|sleep|syspolicy_check) ;;
   *) exit 99 ;;
 esac
 SH
 chmod +x "$fake/command"
-for tool in xcrun spctl codesign ditto sleep syspolicy_check; do
+for tool in xcrun spctl codesign ditto sleep syspolicy_check security; do
   ln -s command "$fake/$tool"
 done
 

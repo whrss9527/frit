@@ -58,7 +58,15 @@ jobs:
       build-command: UNIVERSAL=1 scripts/build-app.sh && cd dist && ditto -c -k --keepParent Stox.app Stox.zip
       archives: dist/Stox.zip
       frit-ref: <和上面同一个提交或标签>
-    secrets: inherit
+    secrets:
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+      NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+      NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+      NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
 ```
 
 要发新版本时，在 CHANGELOG.md 最上面加一节（`## 0.46.0` 或 `## 0.46.0（2026-10-01）`）推到 main；CI 通过后，发现这个版本还没有标签，就自动打标签、打包、签名、公证并发布。
@@ -72,7 +80,7 @@ jobs:
 | `CODESIGN_IDENTITY`、`CODESIGN_KEYCHAIN`、`CODESIGN_NAME` | 配了证书时有值，签名用；没有时 ad-hoc 签名 |
 | `FRIT_RELEASE` | Frit 发布脚本所在的目录，可以直接调用 `"$FRIT_RELEASE/sign.sh"`、`"$FRIT_RELEASE/thin-archives.sh"` |
 
-其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
+其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。0.2.0 起默认要求公证；只有开发自测才显式设 `require-notarization: false`。正式发布建议设置 `team-id` 为证书的 10 位团队 ID；每个归档的签名必须匹配。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
 
 升 Frit 次版本前必须通过一次四 App 下游矩阵。[downstream.yml](.github/workflows/downstream.yml) 可手动运行，也由完整 CI 在推送（含 main）时调用；版本标签等待包含矩阵的 CI。已接入的 App 使用当前 Frit 提交 SHA 编译、单测和更新 e2e，某列失败不会取消其他列。尚未声明 Frit Swift 包的 App 明确报告“未运行”，接入后自动生效，不能把该状态当成已验证。
 

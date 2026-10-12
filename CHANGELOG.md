@@ -2,9 +2,13 @@
 
 Frit 的版本号和发布说明。App 仓库在 `uses:` 里写的 `@` 后面可以是这里的版本标签，也可以是某个提交。
 
-## Unreleased
+## 0.2.0
 
 - Frit 自身的版本标签在对应 main 提交的完整 CI 通过后根据版本记录创建；手动运行也检查 CI，已有标签不移动。
+
+- 不兼容变更：`require-notarization` 默认改为 true，未签名或未公证时不发布；开发试运行须显式关闭要求。新增 `team-id` 核对签名团队。
+- Actions 固定到完整提交，actionlint 下载核对 SHA-256，Dependabot 每月集中更新 Actions。
+- Apple ID 公证凭据先存入临时钥匙串 profile，后续提交、等待、日志命令不再携带 App 专用密码；退出时删除临时钥匙串。
 
 - FritCore 加入公共更新逻辑：GitHub 发布与列表、正式版和测试版通道、四种附件命名、校验和、安装位置、双语发布说明和跨版本更新说明。
 - 从 Meno 原样迁入 `TolerantJSON`、`LossyArray`，为后续设置与同步迁移保留容错解码行为。

@@ -83,6 +83,7 @@ mkdir -p "$fake"
 cat > "$fake/xcrun" <<'SH'
 #!/bin/bash
 case "$1 $2" in
+  "notarytool store-credentials") IFS= read -r test_password; [ "$test_password" = x ] || exit 1; echo "测试 profile 已存储" ;;
   "notarytool submit") echo '{"id":"00000000-0000-4000-8000-000000000000","message":"Successfully uploaded file"}' ;;
   "notarytool wait") echo "{\"id\":\"$3\",\"status\":\"${FAKE_NOTARY_STATUS:-Accepted}\",\"message\":\"Processing complete\"}"; exit "${FAKE_NOTARY_WAIT_EXIT:-0}" ;;
   "notarytool log") echo '{"issues":[{"message":"fake notary issue"}]}' ;;
@@ -147,6 +148,7 @@ for command in submit wait; do
 done
 xcrun notarytool wait --help 2>&1 | grep -qE -- "--timeout( |,|\$)" || { echo "notarytool wait 没有 --timeout 参数"; exit 1; }
 xcrun notarytool log --help >/dev/null
+xcrun notarytool store-credentials --help >/dev/null
 xcrun --find stapler >/dev/null
 echo "公证脚本通过"
 
