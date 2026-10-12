@@ -9,10 +9,10 @@ Frit 是玻璃熔块，做玻璃之前先烧好的基础原料。这几个 App �
 | 部分 | 内容 | 状态 |
 | --- | --- | --- |
 | 发布流程 | 可复用的 GitHub Actions 工作流 `release-app.yml` 和 `scripts/release/` 里的脚本：从 CHANGELOG.md 定版本、打包、Developer ID 签名、苹果公证、钉票据、按芯片的精简包、校验和、草稿再公开的 Release，以及更新端到端测试用的假发布 | 可以用 |
-| `FritCore` | 只依赖 Foundation 的纯逻辑，Linux 上也能测试。现在有版本号解析和比较 | 开发中 |
-| `FritUpdate` | 一键更新：检查、下载、校验、按团队 ID 校验签名、替换、重新启动，以及更新条和设置区的界面 | 计划中 |
+| `FritCore` | 只依赖 Foundation 的纯逻辑，Linux 上也能测试：版本比较、发布与附件解析、校验和、安装位置、双语更新说明和容错 JSON | 可以用 |
+| `FritUpdate` | macOS 一键更新核心及公共更新条/更新区、中英文语言覆盖、可选严格检查和保留旧包的原子替换 | 可以用 |
 | `FritUI` | 玻璃材质、卡片、按钮样式、浮动面板 | 计划中 |
-| `FritSystem` | 全局快捷键和录制控件、登录时启动、通知、权限、日志 | 计划中 |
+| `FritSystem` | Shell、重启回滚和文件日志已提供；全局快捷键和录制控件、登录时启动、通知与权限待扩展 | 开发中 |
 | `FritSync` | iCloud 云盘文件同步 | 计划中 |
 
 模块按功能平铺，统一用 `Frit` 前缀。同时支持 macOS 13 和 iOS 17，只在 macOS 上有意义的模块（一键更新、全局快捷键这些）在 iOS 上编译为空。
@@ -82,6 +82,8 @@ jobs:
 
 其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。0.2.0 起默认要求公证；只有开发自测才显式设 `require-notarization: false`。正式发布建议设置 `team-id` 为证书的 10 位团队 ID；每个归档的签名必须匹配。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
 
+升 Frit 次版本前必须通过一次四 App 下游矩阵。[downstream.yml](.github/workflows/downstream.yml) 可手动运行，也由完整 CI 在推送（含 main）时调用；版本标签等待包含矩阵的 CI。已接入的 App 使用当前 Frit 提交 SHA 编译、单测和更新 e2e，某列失败不会取消其他列。尚未声明 Frit Swift 包的 App 明确报告“未运行”，接入后自动生效，不能把该状态当成已验证。
+
 正式版发布前会比较仓库中全部已公开的正式版。只有更高的版本（或重新打包当前最高版本的原标签）才会标为 `latest`；重打包旧版会显式设置 `latest=false`。预发布和草稿不参与比较。正式版标签无法解析或 GitHub 列表读取失败时停止发布，避免错误地改变更新入口。
 
 ### 额外附件和归档别名
@@ -114,6 +116,16 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 | `select-xcode.sh` | 在 GitHub 的 macOS runner 上切到最新的正式版 Xcode |
 
 ## 开发
+
+公共更新逻辑的 API、各 App 对应的参数和迁移来源见 [docs/update-core.md](docs/update-core.md)。它们只整理数据；网络下载、签名验证、替换文件和界面由后续模块处理。
+
+最小系统模块的线程、日志和重启约定见 [docs/system.md](docs/system.md)。
+
+一键更新核心的配置、取消与安装语义见 [docs/update.md](docs/update.md)。
+
+更新视图、语言覆盖和可打开的 Sample.app 见 [docs/update-views.md](docs/update-views.md)。
+
+Meno 严格检查、原子替换和启动回滚配置见 [docs/atomic-update.md](docs/atomic-update.md)。
 
 ```bash
 swift test                          # FritCore 单元测试（macOS 和 Linux）
