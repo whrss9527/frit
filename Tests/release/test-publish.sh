@@ -5,6 +5,9 @@ here="$(cd "$(dirname "$0")" && pwd)"
 release="$here/../../scripts/release"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+export GITHUB_OUTPUT="$work/github-output" GITHUB_ENV="$work/github-env" GITHUB_PATH="$work/github-path"
+export GITHUB_STEP_SUMMARY="$work/github-summary" GITHUB_STATE="$work/github-state"
+unset RELEASE_ASSETS EXTRA_ASSETS ASSET_ALIASES PRERELEASE OVERWRITE DRY_RUN TAG SHA ASSET_MANIFEST
 export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 
 fail() { echo "失败：$*"; exit 1; }

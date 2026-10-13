@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -116,7 +117,10 @@ class ReleaseIntegrityTests(unittest.TestCase):
                         GH_REPO='fixture/app', TAG='v1.0.0', SHA=self.sha, APP_NAME='App',
                         ARCHIVES='dist/App.zip', EXTRA_ASSETS='dist/plugins.json',
                         RELEASE_ASSETS='dist/App.zip dist/plugins.json', ASSET_ALIASES='',
+                        PRERELEASE='false', OVERWRITE='false', DRY_RUN='false',
                         ARCHIVE_DIR='dist', NOTES_FILE='notes.md', GITHUB_OUTPUT=str(self.root / 'output'))
+        for channel in ('GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STEP_SUMMARY', 'GITHUB_STATE'):
+            self.env[channel] = str(self.root / channel.lower())
         subprocess.run(['bash', str(RELEASE / 'assets.sh')], cwd=self.app, env=self.env, check=True, capture_output=True)
         self.save({'status': 'none', 'assets': [], 'notes': 'old notes', 'latest': 'true', 'calls': [], 'list_count': 0})
 
@@ -350,6 +354,31 @@ class ReleaseIntegrityTests(unittest.TestCase):
         result = self.run_script('plan.sh')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_no_mutation(before)
+
+
+class FixtureIsolationTests(unittest.TestCase):
+    def test_consecutive_ci_steps_do_not_leak_file_commands(self):
+        with tempfile.TemporaryDirectory(prefix='frit-ci-file-commands-') as directory:
+            root = Path(directory)
+            env = dict(os.environ)
+            env.update(RELEASE_ASSETS='dist/Production.zip', EXTRA_ASSETS='dist/Production-plugin.zip',
+                       TAG='v99.0.0', PRERELEASE='true', OVERWRITE='true')
+            channels = ('GITHUB_OUTPUT', 'GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_STEP_SUMMARY', 'GITHUB_STATE')
+            for channel in channels:
+                path = root / channel.lower()
+                path.write_bytes(b'')
+                env[channel] = str(path)
+            first = subprocess.run([sys.executable, '-m', 'unittest',
+                                    'test_release_integrity.ReleaseIntegrityTests.test_partial_draft_failure_stays_hidden_and_retries'],
+                                   cwd=RELEASE.parents[1] / 'Tests/release', env=env, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            for channel in channels:
+                self.assertEqual(Path(env[channel]).read_bytes(), b'', channel + ' 被 Python fixture 污染')
+            second = subprocess.run(['bash', str(RELEASE.parents[1] / 'Tests/release/test-publish.sh')],
+                                    cwd=RELEASE.parents[1], env=env, capture_output=True, text=True)
+            self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            for channel in channels:
+                self.assertEqual(Path(env[channel]).read_bytes(), b'', channel + ' 被后续发布脚本 fixture 污染')
 
 
 if __name__ == '__main__':
