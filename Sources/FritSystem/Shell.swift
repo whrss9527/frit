@@ -30,7 +30,7 @@ public enum ShellError: LocalizedError, Equatable, Sendable {
     }
 }
 
-/// 同步入口只等内部 Dispatch 状态机；结果不通过 Swift Task 传回。
+/// 同步入口只等内部 Dispatch worker；结果不通过 Swift Task 传回。
 private final class ShellResultBox: @unchecked Sendable {
     private let lock = NSLock()
     private var result: Result<ShellResult, Error>?

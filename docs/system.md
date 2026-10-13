@@ -4,13 +4,13 @@ macOS 可用全部 API；Linux 编译 Shell、文件日志和回滚脚本测试�
 
 ## Shell
 
-`Shell.run(_:_:timeout:) async throws -> ShellResult` 用 Dispatch 串行状态机启动进程和读取 stdout/stderr，Swift 协作线程只等待 continuation。同步入口 `runSync` 等待同一个状态机，会阻塞调用线程；界面代码用异步入口。
+`Shell.run(_:_:timeout:) async throws -> ShellResult` 用单个 Dispatch worker 同时观察进程退出、读取 stdout/stderr、取消和单调截止时间，Swift 协作线程只等待 continuation。同步入口 `runSync` 等待同一个 worker，会阻塞调用线程；界面代码用异步入口。
 
 参数直接交给 `posix_spawn`，不通过 shell 拼接；stdin 为 `/dev/null`，stdout/stderr 合并。启动时为直接子进程建立独立组并确认 PGID；超时或运行中取消先发 SIGTERM，两秒后发 SIGKILL。只向已确认属于本次执行的组发信号，不能确认独立组时只处理直接子进程。直接子进程的退出先由 `waitid(WNOWAIT)` 观察；关闭读取后才 `waitpid` 回收，避免在信号清理期间 PID 被复用。自行收到信号退出仍返回非零 `status`，不会被误判为超时。
 
 Task 在调用前已取消时不启动命令；运行中取消会抛 `CancellationError`，取消不会撤销已经完成的外部副作用。调用方若捕获后忽略取消，仍应自己决定是否继续业务流程。更新的文件替换事务不在中途插入取消。
 
-读取使用非阻塞 FD，每次最多读取 1 MiB，再让出队列给取消和计时器。即使后代创建新的 session/进程组并持有 stdout 或 stderr，超时或取消也会在两秒终止宽限后关闭本执行器的读取端、回收直接 child，再返回；不会等待逃逸后代的 EOF，也不追杀逃逸组或任意 PID。正常操作系统进程终止与调度下，等待上限为 `timeout + 2 秒`（取消则为请求后两秒），不承诺清理已经逃逸的进程或撤销其副作用。没有返回后继续排空输出的 Swift Task。
+读取使用非阻塞 FD，每轮最多读取 1 MiB，随后重新观察取消和截止时间；等待使用最长 50ms 的 POSIX poll，EOF 后等待时不再 poll 已关闭的输出流。每个正在执行的调用占用一个 Dispatch worker，空闲等待最多每秒醒来 20 次，取消通常最多 50ms 被观察到；24 个并发调用和 40 次并发退出/取消由真实 fixture 验证。即使后代创建新的 session/进程组并持有 stdout 或 stderr，超时或取消也会在两秒终止宽限后关闭本执行器的读取端、回收直接 child，再返回；不会等待逃逸后代的 EOF，也不追杀逃逸组或任意 PID。正常操作系统进程终止与调度下，等待上限为 `timeout + 2 秒` 加短 poll/调度延迟（取消则为请求被观察后两秒），不承诺清理已经逃逸的进程或撤销其副作用。没有返回后继续排空输出的 Swift Task 或 IO 回调。
 
 `ShellResult` 提供 `output`、`status`、`succeeded` 和 `trimmedOutput`。启动失败和超时分别抛 `ShellError.launchFailed` / `.timeout`。
 

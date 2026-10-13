@@ -54,32 +54,16 @@ private struct ShellOutput {
     }
 }
 
-/// 直接子进程由本执行器创建独立进程组；保留退出 PID 到关闭 IO 后再回收。
-/// 没有 Swift drain Task；等待直接子进程的 worker 不读取后代持有的管道。
+/// 一个 Dispatch worker 同时观察直接 child、非阻塞 IO、取消和单调截止时间。
+/// 没有 DispatchSource 的 FD 注册生命周期，也没有返回后排空输出的 Swift Task。
 final class FritShellExecution: @unchecked Sendable {
-    // pipe→CLOEXEC 设置不是原子操作；本库并发启动不能继承另一执行的临时管道。
     private static let launchLock = NSLock()
     private let queue = DispatchQueue(label: "FritSystem.Shell", qos: .userInitiated)
     private let cancellation = ShellCancellation()
     private let executable: String
     private let arguments: [String]
     private let timeout: TimeInterval
-    private var completion: (@Sendable (Result<ShellResult, Error>) -> Void)?
-    private var reader: DispatchSourceRead?
-    private var readerCancelled = false
-    private var descriptor: Int32 = -1
-    private var pid: pid_t = 0
-    private var ownsGroup = false
-    private var exited = false
-    private var eof = false
-    private var escalated = false
-    private var finishing = false
-    private var finished = false
-    private var failure: Error?
-    private var output = ShellOutput()
-    private var timeoutItem: DispatchWorkItem?
-    private var escalationItem: DispatchWorkItem?
-    private var fallbackStatus: Int32?
+    private var pid: pid_t = 0 // 只在本次执行的 worker 内访问。
 
     init(executable: String, arguments: [String], timeout: TimeInterval) {
         self.executable = URL(fileURLWithPath: executable).path
@@ -88,79 +72,169 @@ final class FritShellExecution: @unchecked Sendable {
     }
 
     func start(_ completion: @escaping @Sendable (Result<ShellResult, Error>) -> Void) {
-        queue.async { self.begin(completion) }
-    }
-
-    func cancel() {
-        cancellation.set()
         queue.async {
-            guard self.completion != nil, !self.finishing, !self.finished else { return }
-            if self.pid > 0 { self.stop(CancellationError()) }
-            else { self.finish(.failure(CancellationError())) }
+            completion(Result { try self.execute() })
         }
     }
-
+    func cancel() { cancellation.set() }
     private func error(_ code: Int32) -> ShellError {
         .launchFailed((executable as NSString).lastPathComponent, String(cString: strerror(code)))
     }
+    private var now: TimeInterval { Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 }
 
-    private func begin(_ completion: @escaping @Sendable (Result<ShellResult, Error>) -> Void) {
-        self.completion = completion
-        guard !cancellation.requested else { finish(.failure(CancellationError())); return }
+    private func execute() throws -> ShellResult {
+        let launched = try launch()
+        var descriptor = launched.descriptor
+        var ownsGroup = launched.ownsGroup
+        defer { if descriptor >= 0 { close(descriptor) } }
+        let deadline = now + timeout
+        var cleanupDeadline: TimeInterval?
+        var failure: Error?
+        var exited = false
+        var eof = false
+        var escalated = false
+        var fallbackWait = false
+        var status: Int32 = 0
+        var output = ShellOutput()
+        var bytes = [UInt8](repeating: 0, count: 65536)
+
+        func signal(_ value: Int32) {
+            guard pid > 0 else { return }
+            // 正常路径的 waitid(WNOWAIT) 保留 PID，最后回收前不会复用身份。
+            if ownsGroup { kill(-pid, value) }
+            else if !exited { kill(pid, value) }
+        }
+        func stop(_ reason: Error) {
+            guard failure == nil else { return }
+            failure = reason
+            signal(SIGTERM)
+            cleanupDeadline = now + 2
+        }
+        func observeExit() {
+            guard !exited, pid > 0 else { return }
+            if !fallbackWait {
+                var information = siginfo_t()
+                var result: Int32
+                repeat {
+                    result = waitid(P_PID, UInt32(pid), &information, WEXITED | WNOWAIT | WNOHANG)
+                } while result == -1 && errno == EINTR
+                if result == 0 {
+                    exited = information.si_signo != 0
+                    return
+                }
+                let reason = errno
+                if reason == ECHILD {
+                    // 外部代码已回收 child，旧 PID 不能再用于信号。
+                    pid = 0; ownsGroup = false; exited = true
+                    failure = failure ?? error(reason)
+                    cleanupDeadline = now
+                    return
+                }
+                // 不支持或失败的 waitid 改用 waitpid；提前回收后不再向旧组发信号。
+                fallbackWait = true
+                let owned = waitpid(pid, &status, WNOHANG)
+                if owned == 0 { stop(error(reason)); return }
+                if owned == pid || (owned == -1 && errno == ECHILD) {
+                    pid = 0; ownsGroup = false; exited = true
+                    stop(error(reason))
+                    return
+                }
+                if owned == -1 && errno == EINTR { return }
+                pid = 0; ownsGroup = false; exited = true
+                failure = failure ?? error(reason)
+                cleanupDeadline = now
+                return
+            }
+            var result: pid_t
+            repeat { result = waitpid(pid, &status, WNOHANG) } while result == -1 && errno == EINTR
+            if result == pid || result == -1 {
+                let reason = errno
+                pid = 0; ownsGroup = false; exited = true
+                if result == -1 { failure = failure ?? error(reason) }
+            }
+        }
+
+        while true {
+            observeExit()
+            if cancellation.requested { stop(CancellationError()) }
+            if now >= deadline { stop(ShellError.timeout((executable as NSString).lastPathComponent)) }
+            if let cleanupDeadline, !escalated, now >= cleanupDeadline {
+                signal(SIGKILL)
+                escalated = true
+            }
+            if !eof {
+                for _ in 0..<16 {
+                    let count = read(descriptor, &bytes, bytes.count)
+                    if count > 0 { output.append(Data(bytes.prefix(count))) }
+                    else if count == 0 { eof = true; break }
+                    else if errno == EINTR { continue }
+                    else if errno == EAGAIN || errno == EWOULDBLOCK { break }
+                    else { eof = true; stop(error(errno)); break }
+                }
+            }
+            // 短命命令的 EOF 与 child 退出通常相邻，避免不必要地再等一次 poll。
+            if eof { observeExit() }
+            if failure != nil {
+                if escalated && exited { break }
+            } else if exited && eof { break }
+
+            let nextDeadline = failure == nil ? deadline : (escalated ? now + 0.05 : cleanupDeadline!)
+            let milliseconds = Int32(max(0, min(50, ceil((nextDeadline - now) * 1000))))
+            var event = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            // EOF 后不再 poll 可读 pipe，避免 HUP 空转；最多 50ms 再观察 child/取消。
+            let result = poll(&event, eof ? 0 : 1, milliseconds)
+            if result == -1 && errno != EINTR { eof = true; stop(error(errno)) }
+            if result > 0 && event.revents & Int16(POLLNVAL) != 0 { eof = true; stop(error(EBADF)) }
+        }
+
+        // 没有其他 IO 回调：关闭 FD、回收直接 child 都在同一个 worker 内完成。
+        close(descriptor); descriptor = -1
+        if pid > 0 {
+            var result: pid_t
+            repeat {
+                repeat { result = waitpid(pid, &status, WNOHANG) } while result == -1 && errno == EINTR
+                if result == 0 {
+                    var unused = pollfd()
+                    _ = poll(&unused, 0, 50)
+                }
+            } while result == 0
+            guard result == pid else {
+                let reason = errno
+                pid = 0
+                throw error(reason)
+            }
+            pid = 0
+        }
+        if let failure { throw failure }
+        let code = status & 0x7f == 0 ? (status >> 8) & 0xff : status & 0x7f
+        return ShellResult(output: output.text, status: code)
+    }
+
+    private func launch() throws -> (descriptor: Int32, ownsGroup: Bool) {
+        // 本库并发启动不能继承另一执行在 pipe→CLOEXEC 设置窗口中的临时管道。
         Self.launchLock.lock()
         defer { Self.launchLock.unlock() }
-        guard !cancellation.requested else { finish(.failure(CancellationError())); return }
+        guard !cancellation.requested else { throw CancellationError() }
         var descriptors: [Int32] = [0, 0]
-        guard pipe(&descriptors) == 0 else { finish(.failure(error(errno))); return }
-        // 调用方可能关闭了标准 FD；file actions 不能把管道误当作 stdin/stdout 关闭。
+        guard pipe(&descriptors) == 0 else { throw error(errno) }
+        var launched = false
+        defer {
+            close(descriptors[1])
+            if !launched { close(descriptors[0]) }
+        }
         for index in descriptors.indices where descriptors[index] <= STDERR_FILENO {
             let moved = fcntl(descriptors[index], F_DUPFD, STDERR_FILENO + 1)
-            guard moved >= 0 else {
-                let reason = error(errno)
-                descriptors.forEach { close($0) }
-                finish(.failure(reason)); return
-            }
-            close(descriptors[index])
-            descriptors[index] = moved
+            guard moved >= 0 else { throw error(errno) }
+            close(descriptors[index]); descriptors[index] = moved
         }
-        descriptor = descriptors[0]
-        let writeDescriptor = descriptors[1]
-        guard fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFL) | O_NONBLOCK) != -1,
-              fcntl(descriptor, F_SETFD, FD_CLOEXEC) != -1,
-              fcntl(writeDescriptor, F_SETFD, FD_CLOEXEC) != -1 else {
-            let reason = error(errno)
-            close(writeDescriptor)
-            finish(.failure(reason)); return
-        }
-        if cancellation.requested {
-            close(writeDescriptor)
-            finish(.failure(CancellationError())); return
-        }
-        let launched = spawn(readDescriptor: descriptor, writeDescriptor: writeDescriptor)
-        close(writeDescriptor)
-        guard launched == 0 else { finish(.failure(error(launched))); return }
-        ownsGroup = getpgid(pid) == pid
-        let reader = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
-        // handler 创建后保持不变；EOF 标记阻止再读取，最终只 cancel 一次。
-        // FD 必须等 cancel handler 再关闭，不能通过复用句柄提前结束 source。
-        reader.setEventHandler { [self] in readOutput(); completeIfReady() }
-        reader.setCancelHandler { [self] in
-            close(descriptor)
-            descriptor = -1
-            self.reader = nil
-            if finishing { finishAfterClosingIO() }
-            else { completeIfReady() }
-        }
-        self.reader = reader
-        reader.resume()
-        observeExit()
-        let timer = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.stop(ShellError.timeout((self.executable as NSString).lastPathComponent))
-        }
-        timeoutItem = timer
-        queue.asyncAfter(deadline: .now() + timeout, execute: timer)
-        if cancellation.requested { stop(CancellationError()) }
+        guard fcntl(descriptors[0], F_SETFL, fcntl(descriptors[0], F_GETFL) | O_NONBLOCK) != -1,
+              fcntl(descriptors[0], F_SETFD, FD_CLOEXEC) != -1,
+              fcntl(descriptors[1], F_SETFD, FD_CLOEXEC) != -1 else { throw error(errno) }
+        guard !cancellation.requested else { throw CancellationError() }
+        let result = spawn(readDescriptor: descriptors[0], writeDescriptor: descriptors[1])
+        guard result == 0 else { throw error(result) }
+        launched = true
+        return (descriptors[0], getpgid(pid) == pid)
     }
 
     private func spawn(readDescriptor: Int32, writeDescriptor: Int32) -> Int32 {
@@ -178,12 +252,9 @@ final class FritShellExecution: @unchecked Sendable {
         code = posix_spawnattr_init(&attributes)
         guard code == 0 else { return code }
         defer { posix_spawnattr_destroy(&attributes) }
-        var mask = sigset_t()
-        var defaults = sigset_t()
-        sigemptyset(&mask)
-        sigfillset(&defaults)
+        var mask = sigset_t(), defaults = sigset_t()
+        sigemptyset(&mask); sigfillset(&defaults)
         sigdelset(&defaults, SIGKILL); sigdelset(&defaults, SIGSTOP)
-        // 不继承 Swift runner 或调用方忽略/屏蔽的信号，保持独立命令的正常信号语义。
         for value in [posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0),
                       posix_spawn_file_actions_adddup2(&actions, writeDescriptor, STDOUT_FILENO),
                       posix_spawn_file_actions_adddup2(&actions, writeDescriptor, STDERR_FILENO),
@@ -205,136 +276,6 @@ final class FritShellExecution: @unchecked Sendable {
                 posix_spawn(&pid, executable, &actions, &attributes, arguments.baseAddress!, variables.baseAddress!)
             }
         }
-    }
-
-    private func observeExit() {
-        let child = pid
-        DispatchQueue.global(qos: .utility).async { [self] in
-            var information = siginfo_t()
-            var result: Int32
-            repeat { result = waitid(P_PID, UInt32(child), &information, WEXITED | WNOWAIT) } while result == -1 && errno == EINTR
-            let reason = result == 0 ? nil : errno
-            queue.async {
-                if let reason {
-                    if reason == ECHILD {
-                        // 其他代码回收了 child 时不能再用旧 PID 发信号。
-                        self.pid = 0; self.ownsGroup = false; self.exited = true
-                        self.finish(.failure(self.error(reason)))
-                        return
-                    }
-                    self.stop(self.error(reason))
-                    self.pollExitAfterWaitError()
-                } else {
-                    self.exited = true
-                    self.completeIfReady()
-                }
-            }
-        }
-    }
-
-    /// waitid 失败时仍用非阻塞 waitpid 回收；只在 queue 上回收，避免与信号并发。
-    private func pollExitAfterWaitError() {
-        guard !finished, !finishing else { return }
-        var status: Int32 = 0
-        let result = waitpid(pid, &status, WNOHANG)
-        if result == pid || (result == -1 && errno == ECHILD) {
-            fallbackStatus = result == pid ? status : 0
-            pid = 0; ownsGroup = false; exited = true
-            completeIfReady()
-        } else {
-            queue.asyncAfter(deadline: .now() + 0.01) { self.pollExitAfterWaitError() }
-        }
-    }
-
-    private func signal(_ value: Int32) {
-        guard pid > 0 else { return }
-        // 正常路径还没有 waitpid：PID 仍保留，不会被新进程重用。
-        if ownsGroup { kill(-pid, value) }
-        else if !exited { kill(pid, value) }
-    }
-
-    private func stop(_ error: Error) {
-        guard !finishing, !finished, failure == nil else { return }
-        failure = error
-        signal(SIGTERM)
-        let escalation = DispatchWorkItem { [weak self] in
-            guard let self, !self.finishing, !self.finished else { return }
-            self.signal(SIGKILL)
-            self.escalated = true
-            self.completeIfReady()
-        }
-        escalationItem = escalation
-        queue.asyncAfter(deadline: .now() + 2, execute: escalation)
-    }
-
-    private func readOutput() {
-        guard !finishing, !finished, !eof else { return }
-        var bytes = [UInt8](repeating: 0, count: 65536)
-        for _ in 0..<16 {
-            let count = read(descriptor, &bytes, bytes.count)
-            if count > 0 { output.append(Data(bytes.prefix(count))) }
-            else if count == 0 {
-                eof = true
-                return
-            }
-            else if errno == EINTR { continue }
-            else if errno == EAGAIN || errno == EWOULDBLOCK { return }
-            else { stop(error(errno)); return }
-        }
-        // 连续输出必须让出队列；可读 source 会再次触发，不另外堆积排空任务。
-    }
-
-    private func completeIfReady() {
-        guard !finishing, !finished else { return }
-        if failure == nil && cancellation.requested { stop(CancellationError()) }
-        if let failure {
-            if escalated && exited { finish(.failure(failure)) }
-        } else if exited && eof {
-            finish(nil)
-        }
-    }
-
-    private var requestedResult: Result<ShellResult, Error>?
-    private func closeReader() {
-        guard let reader, !readerCancelled else { return }
-        readerCancelled = true
-        reader.cancel()
-    }
-
-    private func finish(_ result: Result<ShellResult, Error>?) {
-        guard !finishing, !finished else { return }
-        finishing = true
-        requestedResult = result
-        timeoutItem?.cancel(); escalationItem?.cancel()
-        if reader != nil {
-            closeReader()
-        } else {
-            if descriptor >= 0 { close(descriptor); descriptor = -1 }
-            finishAfterClosingIO()
-        }
-    }
-
-    /// cancel handler 确认没有读取回调后关闭 FD，再回收直接 child，最后恢复等待者。
-    private func finishAfterClosingIO() {
-        guard !finished else { return }
-        var status = fallbackStatus ?? 0
-        if pid > 0 {
-            var result: pid_t
-            repeat { result = waitpid(pid, &status, WNOHANG) } while result == -1 && errno == EINTR
-            if result == 0 {
-                queue.asyncAfter(deadline: .now() + 0.01) { self.finishAfterClosingIO() }
-                return
-            }
-            if result == -1 && requestedResult == nil { requestedResult = .failure(error(errno)) }
-            pid = 0
-        }
-        finished = true
-        reader = nil
-        let code = status & 0x7f == 0 ? (status >> 8) & 0xff : status & 0x7f
-        let result = requestedResult ?? .success(ShellResult(output: output.text, status: code))
-        let callback = completion
-        completion = nil
-        callback?(result)
     }
 }
 #endif
