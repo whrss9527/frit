@@ -132,14 +132,14 @@ final class FritShellExecution: @unchecked Sendable {
                 }
                 // 不支持或失败的 waitid 改用 waitpid；提前回收后不再向旧组发信号。
                 fallbackWait = true
-                let owned = waitpid(pid, &status, WNOHANG)
+                var owned: pid_t
+                repeat { owned = waitpid(pid, &status, WNOHANG) } while owned == -1 && errno == EINTR
                 if owned == 0 { stop(error(reason)); return }
                 if owned == pid || (owned == -1 && errno == ECHILD) {
                     pid = 0; ownsGroup = false; exited = true
                     stop(error(reason))
                     return
                 }
-                if owned == -1 && errno == EINTR { return }
                 pid = 0; ownsGroup = false; exited = true
                 failure = failure ?? error(reason)
                 cleanupDeadline = now

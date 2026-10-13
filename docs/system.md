@@ -49,4 +49,4 @@ helper 将 bundle、旧进程 ID 和旧副本路径作为 argv 传入 `/bin/sh`�
 - Proxi `f765bf4f2cbcb25c49bfd1c81997d5781c352529`，`Sources/Proxi/System/Shell.swift` 和 `Log.swift`：进程输出、超时、查找命令、引用、系统日志、串行文件日志、脱敏和 tail。异步入口改为 Dispatch，脱敏函数和日志位置改为注入；不迁入 Proxi 的 Store。
 - Meno `51c118699e56454df23ffa8eee80ac1a4cfae457`，`Sources/Meno/Support/Relauncher.swift`：helper 脚本保持原行为，公开 bundle 参数，替换 App 专有的 PID 和日志引用。
 
-`swift test` 覆盖预取消、运行取消不续下一条命令、重复取消与退出竞态、直接 PID 回收、owned group 与其他进程隔离、分别逃逸 stdout/stderr 的硬截止、连续洪流、公平读取、24 个并发命令、8 MiB 尾部与非法 UTF-8、同步入口及重复执行后的 FD 关闭。独立 C fixture 在子进程内 fork/setsid，测试需要系统 C 编译器。既有日志、引用、启动失败、自发信号、SIGTERM 忽略、回滚脚本与假 bundle 测试继续执行；macOS CI 还编译实际 AppKit / os.Logger 入口并运行原生更新验证。
+`swift test` 覆盖预取消、运行取消不续下一条命令、重复取消与退出竞态、直接 PID 回收、owned group 与其他进程隔离、组长先退出后子进程的超时清理、分别逃逸 stdout/stderr 的硬截止、连续洪流、公平读取、24 个并发命令、8 MiB 尾部与非法 UTF-8、同步入口及重复执行后的 FD 关闭。独立 C fixture 在子进程内 fork/setsid，心跳区分仍运行的后代和僵尸进程，测试需要系统 C 编译器。既有日志、引用、启动失败、自发信号、SIGTERM 忽略、回滚脚本与假 bundle 测试继续执行；macOS CI 还编译实际 AppKit / os.Logger 入口并运行原生更新验证。

@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
         return 7;
     }
     signal(SIGTERM, SIG_IGN);
-    if (!strcmp(mode, "owned") || !strcmp(mode, "escape-out") || !strcmp(mode, "escape-err")) {
+    if (!strcmp(mode, "owned") || !strcmp(mode, "owned-exit") || !strcmp(mode, "escape-out") || !strcmp(mode, "escape-err")) {
         int handshake[2];
         if (pipe(handshake)) return 93;
         child = fork();
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
             record(root, "child.pid");
             write_all(handshake[1], "!", 1);
             close(handshake[1]);
-            if (strncmp(mode, "escape-", 7) == 0) {
+            if (strncmp(mode, "escape-", 7) == 0 || !strcmp(mode, "owned-exit")) {
                 unsigned long count = 0;
                 struct timespec delay = {0, 20000000};
                 while (1) { heartbeat(root, ++count); nanosleep(&delay, NULL); }
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         close(handshake[0]);
         if (!strcmp(mode, "owned")) signal(SIGTERM, terminate);
         record(root, "parent.pid");
-        if (strncmp(mode, "escape-", 7) == 0) return 0;
+        if (strncmp(mode, "escape-", 7) == 0 || !strcmp(mode, "owned-exit")) return 0;
     } else {
         record(root, "parent.pid");
     }

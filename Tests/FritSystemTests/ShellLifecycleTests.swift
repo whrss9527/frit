@@ -146,6 +146,21 @@ final class ShellLifecycleTests: XCTestCase {
         XCTAssertGreaterThan(try heartbeat(root), before)
     }
 
+    func testOwnedChildIsKilledAfterDirectParentExits() async throws {
+        let root = try directory(), executable = try command()
+        let start = Date()
+        do { _ = try await Shell.run(executable, ["owned-exit", root.path], timeout: 0.15); XCTFail("应超时") }
+        catch { XCTAssertEqual(error as? ShellError, .timeout("fixture")) }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 4)
+        let parent = try identity(root), child = try identity(root, "child.pid")
+        defer { kill(child.pid, SIGKILL) }
+        XCTAssertEqual(child.group, parent.pid)
+        assertReaped(parent.pid)
+        let before = try heartbeat(root)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(try heartbeat(root), before, "保留原 owned group 超时清理，心跳必须停止")
+    }
+
     func testCancellationClosesEscapedPipeBeforeReturning() async throws {
         let root = try directory(), executable = try command()
         let task = Task { try await Shell.run(executable, ["escape-out", root.path], timeout: 10) }
