@@ -8,13 +8,14 @@
 #   TAG        要发布的标签；留空时取 CHANGELOG（默认 CHANGELOG.md）最上面的版本
 #   ARCHIVES   要上传的 zip，空格分隔；用来判断上次发布有没有传完
 #   EXTRA_ASSETS、ASSET_ALIASES  额外附件和归档别名；同样要检查是否已上传
-#   OVERWRITE  true 时标签已存在也重新打包、替换附件
+#   OVERWRITE  true 时允许恢复标签已有的草稿；不覆盖已公开发行
 #   DRY_RUN    true 时只试运行，在当前提交上打包
 #   GH_TOKEN   查 Release 用
 # 要发版时把 tag 和 sha 写进 $GITHUB_OUTPUT（不在 Actions 里时打印出来），不发版时什么都不写：
 #   - 标签还没有：在当前提交上发布
-#   - 标签已经有了，Release 也已公开、附件齐全：不发（除非 OVERWRITE）
-#   - 标签已经有了，但 Release 还是草稿或者缺附件（上次发布中途失败）：在标签指向的提交上接着发布
+#   - 标签已经有了，Release 公开且核验通过：不发；不允许 OVERWRITE
+#   - 标签已经有了，但 Release 不存在或仍是草稿：在标签提交上接着发布
+#   - 已公开发行缺件或核验失败：停止并要求新的补丁版本
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/release/lib.sh
@@ -35,24 +36,24 @@ if [ "${DRY_RUN:-}" = "true" ]; then
 else
   tagged="$(remote_tag_commit "$TAG")"
   if [ -n "$tagged" ]; then
-    if [ "${OVERWRITE:-}" = "true" ]; then
-      echo "${TAG} 已存在，在它指向的提交 ${tagged} 上重新打包"
-    else
-      expected="${ARCHIVES:-} ${EXTRA_ASSETS:-}"
-      for mapping in ${ASSET_ALIASES:-}; do
-        expected="$expected ${mapping#*=}"
-      done
-      complete=0
-      release_complete "$TAG" "$expected" || complete=$?
-      if [ "$complete" = 0 ]; then
-        echo "${TAG} 已经发布过，这次不发版。要发版就在 CHANGELOG.md 最上面加一节新版本。"
-        exit 0
-      elif [ "$complete" = 2 ]; then
-        echo "::error::查不到 ${TAG} 的 Release，没法判断上次有没有发完（见上面 gh 的输出）"
+    expected="${ARCHIVES:-} ${EXTRA_ASSETS:-}"
+    for mapping in ${ASSET_ALIASES:-}; do
+      expected="$expected ${mapping#*=}"
+    done
+    complete=0
+    release_complete "$TAG" "$expected" || complete=$?
+    if [ "$complete" = 0 ]; then
+      if [ "${OVERWRITE:-}" = true ]; then
+        echo "::error::${TAG} 已公开，不允许 overwrite；请发布新的补丁版本"
         exit 1
       fi
-      echo "${TAG} 已经打了标签，但 Release 还是草稿或者缺附件（上次发布没有完成），在标签指向的提交 ${tagged} 上接着发布"
+      echo "${TAG} 已公开且核验通过，这次不发版。要发版就在 CHANGELOG.md 最上面加一节新版本。"
+      exit 0
+    elif [ "$complete" = 2 ]; then
+      echo "::error::${TAG} 的发行状态或附件核验失败，这次不发布"
+      exit 1
     fi
+    echo "${TAG} 已有标签，Release 不存在或仍是草稿，在提交 ${tagged} 上恢复发布"
     sha="$tagged"
   else
     echo "发布 ${TAG}，提交 ${sha}"

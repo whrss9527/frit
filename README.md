@@ -80,11 +80,13 @@ jobs:
 | `CODESIGN_IDENTITY`、`CODESIGN_KEYCHAIN`、`CODESIGN_NAME` | 配了证书时有值，签名用；没有时 ad-hoc 签名 |
 | `FRIT_RELEASE` | Frit 发布脚本所在的目录，可以直接调用 `"$FRIT_RELEASE/sign.sh"`、`"$FRIT_RELEASE/thin-archives.sh"` |
 
-其他参数（测试命令、发布说明、测试版、重新打包已有版本、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。0.2.0 起默认要求公证；只有开发自测才显式设 `require-notarization: false`。正式发布建议设置 `team-id` 为证书的 10 位团队 ID；每个归档的签名必须匹配。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
+其他参数（测试命令、发布说明、测试版、草稿恢复、必须公证、试运行）见 [`release-app.yml`](.github/workflows/release-app.yml) 开头的说明。0.2.0 起默认要求公证；只有开发自测才显式设 `require-notarization: false`。正式发布建议设置 `team-id` 为证书的 10 位团队 ID；每个归档的签名必须匹配。证书和公证凭据怎么配见 [docs/release.md](docs/release.md)。
 
 升 Frit 次版本前必须通过一次四 App 下游矩阵。[downstream.yml](.github/workflows/downstream.yml) 可手动运行，也由完整 CI 在推送（含 main）时调用；版本标签等待包含矩阵的 CI。已接入的 App 使用当前 Frit 提交 SHA 编译、单测和更新 e2e，某列失败不会取消其他列。尚未声明 Frit Swift 包的 App 明确报告“未运行”，接入后自动生效，不能把该状态当成已验证。
 
-正式版发布前会比较仓库中全部已公开的正式版。只有更高的版本（或重新打包当前最高版本的原标签）才会标为 `latest`；重打包旧版会显式设置 `latest=false`。预发布和草稿不参与比较。正式版标签无法解析或 GitHub 列表读取失败时停止发布，避免错误地改变更新入口。
+已公开版本保持不变：核对附件、上传状态、原 `SHA256SUMS.txt` 和 GitHub 摘要后，完整发行只读跳过，不修改 notes、latest 或二进制；无 GitHub 摘要的旧附件会下载计算 SHA-256。公开发行缺件或摘要不一致时停止，要求发布新的补丁版本。`overwrite` 只用于标签已有的草稿，不能覆盖公开发行，也不会把公开发行转回草稿。脚本在发布锁内再次核验，定版本后已经由另一运行发出的版本也会跳过。
+
+新发行与已有草稿上传前核对本次文件和校验和，上传后核对远端与本次清单一致，全部通过才公开。正式版公开前再次比较全部已公开的正式版，只有更高的版本才会标为 `latest`；旧标签的草稿恢复会显式设置 `latest=false`。预发布和草稿不参与比较。正式版标签无法解析或 GitHub 列表读取失败时停止发布，避免错误地改变更新入口。
 
 ### 发版前验证更新
 
@@ -112,8 +114,9 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 | `notarize.sh` | 提交公证、等结果、钉票据、重新打包；没通过时打印苹果的日志 |
 | `thin-archives.sh` | 从通用二进制的 .app 打出 arm64、x86_64 两个精简包，重新签名 |
 | `assets.sh` | 公证后复制别名，生成附件清单和校验和 |
-| `plan.sh` | 判断是否发版；草稿或缺附件时在标签对应的提交上补发 |
+| `plan.sh` | 判断是否发版；不存在或草稿发行在标签提交上恢复，公开发行只读核验 |
 | `publish.sh` | 发布前核对标签与构建提交，上传全部附件后公开 Release |
+| `check-release.py` | 核对本地/远端附件与校验和，保护已公开发行不被覆盖 |
 | `changelog.sh` | 读 CHANGELOG.md 最上面的版本、取某个版本的一节 |
 | `latest.py` | 比较全部正式版，防止重新打包旧版后 latest 倒退 |
 | `fake-release.sh` | 更新端到端测试用：把 .app 改成 9.9.9，用本地 HTTP 服务器提供 GitHub 格式的 latest.json 和安装包 |
