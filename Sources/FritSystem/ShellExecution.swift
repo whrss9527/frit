@@ -145,6 +145,8 @@ final class FritShellExecution: @unchecked Sendable {
                 cleanupDeadline = now
                 return
             }
+            // 首次 waitpid 确认 child 仍在后，保留 PID 到最后一轮组信号结束。
+            if !escalated { return }
             var result: pid_t
             repeat { result = waitpid(pid, &status, WNOHANG) } while result == -1 && errno == EINTR
             if result == pid || result == -1 {
