@@ -16,7 +16,7 @@ for source in (root / "Sources/FritUpdate").glob("*.swift"):
     source_keys.update(re.findall(r'updateText\("([^"\n]*)"', source.read_text()))
 if source_keys != set(catalog["strings"]):
     raise SystemExit("文案键不一致：" + repr(source_keys ^ set(catalog["strings"])))
-for language in ["zh-Hans", "en"]:
+for language in ["zh-Hans", "zh-Hant", "en"]:
     lines = []
     for key, entry in sorted(catalog["strings"].items()):
         unit = entry["localizations"][language]["stringUnit"]
@@ -34,4 +34,4 @@ for language in ["zh-Hans", "en"]:
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(output)
-print("中英文资源和占位符已核对")
+print("简体、繁体和英文资源及占位符已核对")

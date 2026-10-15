@@ -10,9 +10,9 @@ UpdateSection(updater: updater, pageURLOpener: { NSWorkspace.shared.open($0) })
 
 组件只提供内容、字体和内部间距。卡片或玻璃背景由 App 包装，不依赖 FritUI。公共视图覆盖所有 Phase，包含大小未知的下载、线路说明、校验、安装、重启、错误、跳过、手动下载、App 管理设置入口和搬到应用程序的说明。Pop 的 Form 更新页与 Meno 的 AboutPane 保留在 App，只接公共数据源。
 
-App 改界面语言时设置 `FritLocalization.languageOverride = "en"` 或 `"zh-Hans"`，跟随系统时设为 nil。钩子位于 FritCore，线程安全；视图观察变化，在运行时重选模块 lproj。不会更改 AppleLanguages，不依赖 Foundation 缓存失效；`en-US` 会回退到 en。日期使用对应 Locale，错误描述每次读取都按当前语言生成。
+App 改界面语言时设置 `FritLocalization.languageOverride = "en"` 、`"zh-Hans"` 或 `"zh-Hant"`，跟随系统时设为 nil。钩子位于 FritCore，线程安全；视图观察变化，在运行时重选模块 lproj。不会更改 AppleLanguages，不依赖 Foundation 缓存失效；`en-US` 会回退到 en；`zh-TW`、`zh-HK`、`zh-MO` 优先繁体，显式 `zh-Hans` / `zh-Hant` 优先于地区。其他模块没有繁体时仍可回退简体。日期使用对应 Locale，错误描述每次读取都按当前语言生成。
 
-文案唯一来源为 `Sources/FritUpdate/Resources/Localizable.xcstrings`，源语言 zh-Hans，提供 en。`scripts/generate-localizations.py` 同步产生两份 lproj/Localizable.strings；catalog 作为编写源排除出构建，避免 Xcode 同时编译它和生成资源造成重复输出。字符串用 `String(localized:bundle: .module)` 或显式覆盖的模块语言包读取，原生 SwiftPM 与 Xcode 后端使用同一份译文。改文案后运行生成脚本；`--check` 校验代码键、两种译文、占位符和生成结果，CI 会检查。
+文案唯一来源为 `Sources/FritUpdate/Resources/Localizable.xcstrings`，源语言 zh-Hans，提供 zh-Hant 和 en。`scripts/generate-localizations.py` 同步产生三份 lproj/Localizable.strings；catalog 作为编写源排除出构建，避免 Xcode 同时编译它和生成资源造成重复输出。字符串用 `String(localized:bundle: .module)` 或显式覆盖的模块语言包读取，原生 SwiftPM 与 Xcode 后端使用同一份译文。改文案后运行生成脚本；`--check` 校验代码键、三种译文、占位符和生成结果，CI 会检查。
 
 ## 预览 Sample.app
 
