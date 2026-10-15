@@ -12,51 +12,106 @@ permissions:
   contents: read
 
 jobs:
-  app:
-    name: ${{ matrix.app }} 的 Frit 兼容检查
-    runs-on: macos-15
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        app: [stox, pop, proxi, meno]
+  plan:
+    name: 下游源码与依赖发现（Linux）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.frit-sha || github.sha }}
           path: frit
           persist-credentials: false
-      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: whrss9527/stox
+          ref: main
+          path: apps/stox
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: whrss9527/pop
+          ref: main
+          path: apps/pop
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: whrss9527/proxi
+          ref: main
+          path: apps/proxi
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: whrss9527/meno
+          ref: main
+          path: apps/meno
+          persist-credentials: false
+      - name: 只读发现并固定后续检查的源码
+        id: plan
+        env:
+          FRIT_SHA: ${{ inputs.frit-sha || github.sha }}
+        run: |
+          matrix=$(python3 frit/scripts/downstream/plan.py apps "$FRIT_SHA")
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  app:
+    name: ${{ matrix.app }} 的 Frit 兼容检查
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: matrix.active
+        with:
+          ref: ${{ inputs.frit-sha || github.sha }}
+          path: frit
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: matrix.active
         with:
           repository: whrss9527/${{ matrix.app }}
-          ref: main
+          ref: ${{ matrix.sha }}
           path: app
           persist-credentials: false
       - name: 选择 Xcode
+        if: matrix.active
         run: bash frit/scripts/release/select-xcode.sh
       - name: 固定已有 Frit 依赖
         id: pin
+        if: matrix.active
         env:
           FRIT_SHA: ${{ inputs.frit-sha || github.sha }}
-        run: python3 frit/scripts/downstream/pin.py app "$FRIT_SHA" >> "$GITHUB_OUTPUT"
+        run: |
+          python3 frit/scripts/downstream/pin.py app "$FRIT_SHA" >> "$GITHUB_OUTPUT"
+      - name: 确认原生列仍声明依赖
+        if: matrix.active
+        env:
+          ACTIVE: ${{ steps.pin.outputs.active }}
+        run: test "$ACTIVE" = true
       - name: 尚未接入 Frit
-        if: steps.pin.outputs.active != 'true'
-        run: echo 'App 的 main 尚未声明 Frit Swift 包，此列尚不生效。'
+        if: '!matrix.active'
+        run: echo 'App 的精确源码尚未声明 Frit Swift 包；仅在 Linux 记录，未运行原生兼容验证。'
       - name: 编译
         id: build
-        if: steps.pin.outputs.active == 'true'
+        if: matrix.active
         env:
           FRIT_APP: ${{ matrix.app }}
         run: bash frit/scripts/downstream/run.sh "$FRIT_APP" build
       - name: 单元测试
         id: test
-        if: steps.pin.outputs.active == 'true'
+        if: matrix.active
         env:
           FRIT_APP: ${{ matrix.app }}
         run: bash frit/scripts/downstream/run.sh "$FRIT_APP" test
       - name: 更新端到端
         id: update
-        if: steps.pin.outputs.active == 'true'
+        if: matrix.active
         env:
           FRIT_APP: ${{ matrix.app }}
         run: bash frit/scripts/downstream/run.sh "$FRIT_APP" update
@@ -64,26 +119,26 @@ jobs:
         if: always()
         env:
           FRIT_APP: ${{ matrix.app }}
+          APP_SHA: ${{ matrix.sha }}
           FRIT_SHA: ${{ inputs.frit-sha || github.sha }}
-          ACTIVE: ${{ steps.pin.outputs.active }}
+          ACTIVE: ${{ matrix.active }}
           PIN: ${{ steps.pin.outcome }}
           BUILD: ${{ steps.build.outcome }}
           TEST: ${{ steps.test.outcome }}
           UPDATE: ${{ steps.update.outcome }}
         run: |
-          app_sha=$(git -C app rev-parse HEAD 2>/dev/null || echo unavailable)
           {
             printf '### %s\n\n' "$FRIT_APP"
-            printf 'Frit %s · App %s\n\n' "$FRIT_SHA" "$app_sha"
-            if [ "$ACTIVE" != true ] && [ "$PIN" = success ]; then
-              printf '尚未声明 Frit Swift 包：未运行，待 App 接入后自动生效。\n'
+            printf 'Frit %s · App %s\n\n' "$FRIT_SHA" "$APP_SHA"
+            if [ "$ACTIVE" != true ]; then
+              printf '尚未声明 Frit Swift 包：Linux只读记录，原生未运行，待 App 接入后自动生效。\n'
             else
               printf '| 固定依赖 | 编译 | 单元测试 | 更新 e2e |\n| --- | --- | --- | --- |\n'
               printf '| %s | %s | %s | %s |\n' "$PIN" "$BUILD" "$TEST" "$UPDATE"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: failure() && matrix.active
         with:
           name: downstream-${{ matrix.app }}
           path: |
