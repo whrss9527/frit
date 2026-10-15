@@ -14,6 +14,12 @@
             "state": "translated",
             "value": " · via %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · 經%@"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "macOS blocked app replacement. Allow it in System Settings → Privacy & Security → App Management, then retry."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS 不允許替換程式。到系統設定的隱私權與安全性 → App 管理中允許後重試"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "Last checked: %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次檢查：%@"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Downloads %@, installs it and relaunches automatically"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載 %@ 後自動安裝並重新啟動"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "The downloaded file has an incorrect size"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載的檔案大小不對"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The downloaded file has an incorrect checksum. It may be incomplete or modified."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載的檔案校驗和不對，可能沒下載完整或被竄改"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "The downloaded app is invalid: %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載的程式不對：%@"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "This is not running from %@.app and cannot update in place"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不是從 %@.app 執行的，沒法在程式裡更新"
           }
         }
       }
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "Show Anyway"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仍然查看"
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Download from Release Page"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "到發佈頁下載"
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "The archive contains no installable app"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "壓縮包裡沒有可安裝的 .app"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Released %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "發佈於 %@"
           }
         }
       }
@@ -206,6 +278,12 @@
             "state": "translated",
             "value": "Cancel"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
         }
       }
     },
@@ -221,6 +299,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel Update"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消更新"
           }
         }
       }
@@ -238,6 +322,12 @@
             "state": "translated",
             "value": "View the Release Page in a Browser"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在瀏覽器裡查看發佈頁"
+          }
         }
       }
     },
@@ -253,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Authorization was cancelled. The app has not changed."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消授權，程式沒有改動"
           }
         }
       }
@@ -270,6 +366,12 @@
             "state": "translated",
             "value": "Updated to %@, relaunching"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已更新到 %@，正在重新啟動"
+          }
         }
       }
     },
@@ -285,6 +387,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Updated to %@, relaunching…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已更新到 %@，正在重新啟動…"
           }
         }
       }
@@ -302,6 +410,12 @@
             "state": "translated",
             "value": "You're up to date"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已經是最新版本"
+          }
         }
       }
     },
@@ -317,6 +431,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skipped %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已跳過 %@"
           }
         }
       }
@@ -334,6 +454,12 @@
             "state": "translated",
             "value": "Open “App Management” Settings"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打開「App 管理」設定"
+          }
         }
       }
     },
@@ -349,6 +475,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The new app is not signed by an allowed developer. It was not installed."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新版本不是允許的開發者簽名的，為了安全沒有安裝"
           }
         }
       }
@@ -366,6 +498,12 @@
             "state": "translated",
             "value": "Update"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
         }
       }
     },
@@ -381,6 +519,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't update to %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新到 %@ 失敗"
           }
         }
       }
@@ -398,6 +542,12 @@
             "state": "translated",
             "value": "Could not replace the app: %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "替換程式失敗：%@"
+          }
         }
       }
     },
@@ -413,6 +563,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "New version %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有新版本 %@"
           }
         }
       }
@@ -430,6 +586,12 @@
             "state": "translated",
             "value": "The server returned %lld"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器返回了 %lld"
+          }
         }
       }
     },
@@ -445,6 +607,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "View Release Notes"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看更新內容"
           }
         }
       }
@@ -462,6 +630,12 @@
             "state": "translated",
             "value": "The checksum file has no unique checksum for this archive"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "校驗檔案裡沒有唯一的附件校驗和"
+          }
         }
       }
     },
@@ -477,6 +651,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Check for Updates"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檢查更新"
           }
         }
       }
@@ -494,6 +674,12 @@
             "state": "translated",
             "value": "Couldn't check for updates: %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檢查更新失敗：%@"
+          }
         }
       }
     },
@@ -509,6 +695,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Downloading %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載 %@"
           }
         }
       }
@@ -526,6 +718,12 @@
             "state": "translated",
             "value": "Downloading %@…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載 %@…"
+          }
         }
       }
     },
@@ -541,6 +739,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Installing %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在安裝 %@"
           }
         }
       }
@@ -558,6 +762,12 @@
             "state": "translated",
             "value": "Installing %@…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在安裝 %@…"
+          }
         }
       }
     },
@@ -573,6 +783,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verifying %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在校驗 %@"
           }
         }
       }
@@ -590,6 +806,12 @@
             "state": "translated",
             "value": "Verifying %@…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在校驗 %@…"
+          }
         }
       }
     },
@@ -605,6 +827,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Checking for updates…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在檢查更新…"
           }
         }
       }
@@ -622,6 +850,12 @@
             "state": "translated",
             "value": "This version does not support the requested strict checks"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此版本尚不支援要求的嚴格檢查"
+          }
         }
       }
     },
@@ -637,6 +871,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Click “Update” to download, install and relaunch"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點「更新」自動下載安裝並重新啟動"
           }
         }
       }
@@ -654,6 +894,12 @@
             "state": "translated",
             "value": "One click: downloads"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下就行：下載"
+          }
         }
       }
     },
@@ -669,6 +915,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Running from a temporary location such as the Downloads folder; this update will be installed in %@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在是從下載資料夾這類暫時位置執行的，這次會裝進%@"
           }
         }
       }
@@ -686,6 +938,12 @@
             "state": "translated",
             "value": "Proxi will reopen automatically"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "程式會自動重新打開"
+          }
         }
       }
     },
@@ -701,6 +959,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Update Now"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即更新"
           }
         }
       }
@@ -718,6 +982,12 @@
             "state": "translated",
             "value": "Could not extract the archive: %@"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解壓失敗：%@"
+          }
         }
       }
     },
@@ -733,6 +1003,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Move %@ to Applications before updating"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先把 %@ 移到應用程式後更新"
           }
         }
       }
@@ -750,6 +1026,12 @@
             "state": "translated",
             "value": "Could not read the server response"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀不懂伺服器返回的內容"
+          }
         }
       }
     },
@@ -765,6 +1047,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skip This Version"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跳過這個版本"
           }
         }
       }
@@ -782,6 +1070,12 @@
             "state": "translated",
             "value": "Haven't checked for updates yet"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有檢查過更新"
+          }
         }
       }
     },
@@ -797,6 +1091,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "This release has no verifiable installer. Download it from the release page."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個版本沒有可以直接安裝和校驗的附件，請到發佈頁手動下載"
           }
         }
       }
@@ -814,6 +1114,12 @@
             "state": "translated",
             "value": "Retry"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重試"
+          }
         }
       }
     },
@@ -829,6 +1135,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Almost done; please don't quit"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "馬上就好，請不要退出"
           }
         }
       }
@@ -846,6 +1158,12 @@
             "state": "translated",
             "value": " (via %@)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "（經%@）"
+          }
         }
       }
     },
@@ -861,6 +1179,12 @@
           "stringUnit": {
             "state": "translated",
             "value": ", and the old copy moved to the Trash"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "，舊的那份移到垃圾桶"
           }
         }
       }
@@ -878,6 +1202,12 @@
             "state": "translated",
             "value": ", verify it, replace the app and restart automatically. Your settings and data are preserved."
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "，校驗後替換程式並自動重新啟動，設定和資料都會保留。"
+          }
         }
       }
     },
@@ -894,6 +1224,12 @@
             "state": "translated",
             "value": "This version requires macOS %@ or later"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個版本需要 macOS %@ 或以上"
+          }
         }
       }
     },
@@ -909,6 +1245,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "This version does not support this Mac’s processor"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這個版本不支援本機處理器"
           }
         }
       }

@@ -25,7 +25,15 @@ public enum FritLocalization {
         guard let language = languageOverride else { return nil }
         let normalized = language.replacingOccurrences(of: "_", with: "-")
         var candidates = [normalized]
-        if normalized.lowercased().hasPrefix("zh") { candidates.append("zh-Hans") }
+        let parts = normalized.lowercased().split(separator: "-")
+        if parts.first == "zh" {
+            // 显式脚本优先于地区；台湾、香港和澳门未指定脚本时用繁体。
+            let traditional = parts.contains("hant") || (!parts.contains("hans")
+                && parts.contains(where: { ["tw", "hk", "mo"].contains($0) }))
+            if traditional { candidates.append("zh-Hant") }
+            // 其他共用模块可能尚无繁体资源，继续保留原来的简体回退。
+            candidates.append("zh-Hans")
+        }
         if let base = normalized.split(separator: "-").first { candidates.append(String(base)) }
         for language in candidates {
             if let path = bundle.path(forResource: language, ofType: "lproj"), let selected = Bundle(path: path) { return selected }

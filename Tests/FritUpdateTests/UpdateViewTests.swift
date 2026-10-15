@@ -8,6 +8,24 @@ import XCTest
 
 @MainActor
 final class UpdateViewTests: XCTestCase {
+    func testTraditionalResourcesRespectExplicitScriptsAndRegionalPreferences() {
+        let previous = FritLocalization.languageOverride
+        defer { FritLocalization.languageOverride = previous }
+        for language in ["zh-Hant", "zh-TW", "zh-HK", "zh-MO", "zh_hk", "ZH_tw", "zh-Hant-CN"] {
+            FritLocalization.languageOverride = language
+            XCTAssertEqual(updateText("检查更新"), "檢查更新", language)
+            XCTAssertEqual(updateText("已更新到 %@，正在重新启动", "2.0.0"), "已更新到 2.0.0，正在重新啟動", language)
+            XCTAssertTrue(UpdateError.checksumMismatch.localizedDescription.contains("校驗"), language)
+        }
+        for language in ["zh-Hans", "zh-Hans-TW", "zh-CN", "zh-SG", "zh"] {
+            FritLocalization.languageOverride = language
+            XCTAssertEqual(updateText("检查更新"), "检查更新", language)
+            XCTAssertEqual(updateText("已更新到 %@，正在重新启动", "2.0.0"), "已更新到 2.0.0，正在重新启动", language)
+        }
+        FritLocalization.languageOverride = "en-GB"
+        XCTAssertEqual(updateText("检查更新"), "Check for Updates")
+    }
+
     func testLanguageOverrideSwitchesWithoutChangingAppleLanguages() async throws {
         let before = UserDefaults.standard.object(forKey: "AppleLanguages") as? [String]
         defer { FritLocalization.languageOverride = nil }

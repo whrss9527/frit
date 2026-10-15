@@ -18,7 +18,7 @@ let package = Package(
         .target(name: "FritSystem", dependencies: ["FritCore"]),
         // 文案源由生成器处理；Xcode 后端不能同时编译 catalog 和生成的 strings。
         .target(name: "FritUpdate", dependencies: ["FritCore", "FritSystem"], exclude: ["Resources/Localizable.xcstrings"], resources: [
-            .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj"),
+            .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj"), .process("Resources/zh-Hant.lproj"),
         ]),
         .testTarget(name: "FritCoreTests", dependencies: ["FritCore"]),
         .testTarget(name: "FritSystemTests", dependencies: ["FritSystem"], resources: [.copy("Fixtures")]),
