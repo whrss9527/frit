@@ -59,7 +59,10 @@ public struct AppVersion: Comparable, CustomStringConvertible, Hashable, Sendabl
         var numbers = components
         while numbers.last == 0 { numbers.removeLast() }
         hasher.combine(numbers)
-        hasher.combine(prerelease)
+        // Foundation 的数字比较会把 beta.01 与 beta.1 视为相等，
+        // 原始后缀不能用于哈希。仅哈希相等时必定相同的预发布存在性；
+        // 同 core 的不同预发布值允许碰撞，保留现有比较和 Unicode 语义。
+        hasher.combine(isPrerelease)
     }
 
     /// `candidate` 比 `current` 新时返回 true；任意一个解析不了时返回 false。
