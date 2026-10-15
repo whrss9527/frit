@@ -49,6 +49,11 @@ static void write_all(int fd, const char *p, size_t n) {
 int main(int argc, char **argv) {
     if (argc < 3) return 92;
     const char *mode = argv[1], *root = argv[2];
+    // 模拟原生 runner 上的冷启动；生命周期测试先确认就绪，再验证后代清理。
+    if (argc > 3 && !strcmp(argv[3], "delayed-start")) {
+        struct timespec delay = {0, 250000000};
+        while (nanosleep(&delay, &delay) < 0 && errno == EINTR) {}
+    }
     if (!strcmp(mode, "race")) {
         record(root, "parent.pid");
         struct timespec delay = {0, 20000000};
@@ -111,6 +116,7 @@ int main(int argc, char **argv) {
         close(handshake[0]);
         if (!strcmp(mode, "owned")) signal(SIGTERM, terminate);
         record(root, "parent.pid");
+        if (!strcmp(mode, "owned-exit")) record(root, "parent.exiting");
         if (strncmp(mode, "escape-", 7) == 0 || !strcmp(mode, "owned-exit")) return 0;
     } else {
         record(root, "parent.pid");

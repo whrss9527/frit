@@ -35,9 +35,9 @@ final class ShellLifecycleTests: XCTestCase {
         let values = try String(contentsOf: root.appendingPathComponent(name), encoding: .utf8).split(separator: " ")
         return (pid_t(values[0])!, pid_t(values[1].trimmingCharacters(in: .whitespacesAndNewlines))!)
     }
-    private func ready(_ root: URL) async throws {
+    private func ready(_ root: URL, _ marker: String = "parent.pid") async throws {
         let deadline = Date().addingTimeInterval(5)
-        while !FileManager.default.fileExists(atPath: root.appendingPathComponent("parent.pid").path) {
+        while !FileManager.default.fileExists(atPath: root.appendingPathComponent(marker).path) {
             if Date() >= deadline { throw ShellError.timeout("fixture 启动") }
             try await Task.sleep(nanoseconds: 5_000_000)
         }
@@ -149,12 +149,17 @@ final class ShellLifecycleTests: XCTestCase {
     func testOwnedChildIsKilledAfterDirectParentExits() async throws {
         let root = try directory(), executable = try command()
         let start = Date()
-        do { _ = try await Shell.run(executable, ["owned-exit", root.path], timeout: 0.15); XCTFail("应超时") }
-        catch { XCTAssertEqual(error as? ShellError, .timeout("fixture")) }
-        XCTAssertLessThan(Date().timeIntervalSince(start), 4)
+        // 这个场景验证组长退出后的清理；150ms 不能保证原生进程已经完成启动。
+        // 刻意延迟250ms，确认父子身份及退出握手，再等待独立的一秒命令截止。
+        let task = Task { try await Shell.run(executable, ["owned-exit", root.path, "delayed-start"], timeout: 1) }
+        do { try await ready(root, "parent.exiting") }
+        catch { task.cancel(); _ = try? await task.value; throw error }
         let parent = try identity(root), child = try identity(root, "child.pid")
         defer { kill(child.pid, SIGKILL) }
         XCTAssertEqual(child.group, parent.pid)
+        do { _ = try await task.value; XCTFail("应超时") }
+        catch { XCTAssertEqual(error as? ShellError, .timeout("fixture")) }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 4)
         assertReaped(parent.pid)
         let before = try heartbeat(root)
         try await Task.sleep(nanoseconds: 100_000_000)
