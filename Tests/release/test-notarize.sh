@@ -40,11 +40,21 @@ case "$tool" in
         exit "$FAKE_WAIT_EXIT"
         ;;
       "notarytool log") printf '{"issues":[{"message":"测试公证日志"}]}\n' ;;
-      "stapler staple"|"stapler validate") echo "测试票据通过" ;;
+      "stapler staple"|"stapler validate")
+        action="$2"
+        count_file="${FAKE_NOTARY_CALLS}.${action}"
+        n="$(cat "$count_file" 2>/dev/null || echo 0)"; n=$((n + 1)); echo "$n" > "$count_file"
+        [ "${FAKE_STAPLER_EXIT:-0}" = 0 ] || exit "$FAKE_STAPLER_EXIT"
+        if [ "$n" -le "${FAKE_STAPLER_NETWORK_FAILURES:-0}" ]; then exit 68; fi
+        echo "测试票据通过" ;;
       *) echo "未预期的 xcrun 调用" >&2; exit 99 ;;
     esac
     ;;
   spctl)
+    if [ "$1" = --status ]; then
+      printf '%s\n' "${FAKE_POLICY:-assessments enabled}"
+      exit "${FAKE_POLICY_EXIT:-0}"
+    fi
     count_file="${FAKE_NOTARY_CALLS}.count"
     n="$(cat "$count_file" 2>/dev/null || echo 0)"
     n=$((n + 1))
@@ -56,33 +66,47 @@ case "$tool" in
       accept) ;;
       *) exit 99 ;;
     esac
-    echo "测试系统检查通过"
+    printf 'accepted\nsource=%s\n' "${FAKE_SOURCE:-Notarized Developer ID}"
     ;;
   codesign)
     if [ "$1" = --verify ]; then exit "$FAKE_SIGNATURE_EXIT"; fi
-    echo "测试签名诊断"
+    printf 'Authority=%s\n' "${FAKE_AUTHORITY:-Developer ID Application: Fixture (TESTONLY00)}"
+    if [[ "$*" = *'--arch arm64'* ]]; then printf 'CDHash=%040d\n' 2; else printf 'CDHash=%040d\n' 1; fi
     ;;
   ditto)
     if [ "$1" = -x ]; then
-      mkdir -p "$4/Sample.app"
+      mkdir -p "$4/Sample.app/Contents/MacOS"
+      python3 - "$4/Sample.app" "$3" <<'PYMOCK'
+import os,plistlib,sys
+from pathlib import Path
+app=Path(sys.argv[1]); (app/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable':'Sample'}))
+(app/'Contents/MacOS/Sample').write_bytes(b'fixture')
+ticket=b''
+if os.environ.get('FAKE_MISSING_ARCH') != 'x86_64': ticket+=bytes.fromhex('0'*39+'1')
+if os.environ.get('FAKE_MISSING_ARCH') != 'arm64' and not (os.environ.get('FAKE_FINAL_BROKEN') == '1' and Path(sys.argv[2]).read_text() == 'repacked\n'):
+ ticket+=bytes.fromhex('0'*39+'2')
+(app/'Contents/CodeResources').write_bytes(ticket)
+PYMOCK
     elif [ "$1" = -c ]; then
       for target in "$@"; do :; done
       printf 'repacked\n' > "$target"
+      [ "${FAKE_PACK_EXIT:-0}" = 0 ] || exit "$FAKE_PACK_EXIT"
     else
       exit 99
     fi
     ;;
+  lipo) echo 'x86_64 arm64' ;;
   security|sleep|syspolicy_check) ;;
   *) exit 99 ;;
 esac
 SH
 chmod +x "$fake/command"
-for tool in xcrun spctl codesign ditto sleep syspolicy_check security; do
+for tool in xcrun spctl codesign ditto sleep syspolicy_check security lipo; do
   ln -s command "$fake/$tool"
 done
 
 prepare() {
-  rm -f "$work/calls" "$work/calls.count"
+  rm -f "$work/calls" "$work/calls.count" "$work/calls.staple" "$work/calls.validate"
   printf 'original\n' > "$work/Sample.zip"
   cp "$work/Sample.zip" "$work/original.zip"
 }
@@ -101,36 +125,51 @@ unchanged() { cmp -s "$work/Sample.zip" "$work/original.zip" || fail "失败时�
 
 prepare
 notarize || fail "首次系统检查通过"
-[ "$(cat "$work/calls.count")" = 1 ] || fail "首次通过后不能重试"
+[ "$(cat "$work/calls.count")" = 2 ] || fail "首次通过后不能重试"
 [ "$(cat "$work/Sample.zip")" = repacked ] || fail "通过后没有重新打包"
 pass "首次通过后重打包"
 
 prepare
 notarize FAKE_ASSESS_MODE=flaky || fail "重试后通过"
-[ "$(cat "$work/calls.count")" = 3 ] || fail "应该在第三次通过"
+[ "$(cat "$work/calls.count")" = 4 ] || fail "应该在第三次通过"
 [ "$(grep -c '^sleep ' "$work/calls")" = 2 ] || fail "只应在两次检查之间等待"
 pass "两次失败后第三次通过"
 
 prepare
 if notarize FAKE_ASSESS_MODE=rejected; then fail "签名拒绝不能通过"; fi
-[ "$(cat "$work/calls.count")" = 4 ] || fail "应有三次重试检查和一次详细诊断"
+[ "$(cat "$work/calls.count")" = 3 ] || fail "拒绝后仅限三次检查"
 [ "$(grep -c '^sleep ' "$work/calls")" = 2 ] || fail "最后一次失败后不能继续等待"
 grep -q 'source=no usable signature' "$work/log" || fail "缺少完整拒绝原因"
 grep -q '测试公证日志' "$work/log" || fail "缺少苹果诊断日志"
 unchanged
 pass "系统检查一直拒绝时诊断并保留原归档"
 
-# Proxi 兼容规则：只在 Accepted、票据通过且签名完整时允许系统缓存延迟，必须明确警告。
+# 未公证来源不再以本机缓存例外放行；原归档必须保留。
 prepare
-notarize FAKE_ASSESS_MODE=unnotarized || fail "符合约束的缓存延迟应记录警告"
-grep -q '::warning::' "$work/log" || fail "缓存延迟没有警告"
-grep -q '^codesign --verify --deep --strict ' "$work/calls" || fail "没有核对签名"
-pass "缓存延迟仍需签名与票据核对"
+if notarize FAKE_ASSESS_MODE=unnotarized; then fail "未公证来源不能通过"; fi
+unchanged
+pass "拒绝未公证来源"
+
+for setting in FAKE_SIGNATURE_EXIT=1 FAKE_MISSING_ARCH=arm64 FAKE_MISSING_ARCH=x86_64 FAKE_FINAL_BROKEN=1 FAKE_PACK_EXIT=1 FAKE_STAPLER_EXIT=65 FAKE_POLICY_EXIT=1 \
+  FAKE_POLICY=disabled FAKE_SOURCE=Unknown 'FAKE_POLICY=assessments enabled (override)' \
+  'FAKE_SOURCE=Notarized Developer ID (override)' 'FAKE_AUTHORITY=Apple Development: Fixture'; do
+  prepare
+  if notarize "$setting"; then fail "不完整验收不得通过：$setting"; fi
+  unchanged
+  pass "拒绝并保留原归档：$setting"
+done
 
 prepare
-if notarize FAKE_ASSESS_MODE=unnotarized FAKE_SIGNATURE_EXIT=1; then fail "无效签名不能使用缓存延迟兜底"; fi
+notarize FAKE_STAPLER_NETWORK_FAILURES=1 || fail "票据临时网络错误应限次重试"
+[ "$(cat "$work/calls.staple")" = 2 ] || fail "staple重试次数"
+[ "$(cat "$work/calls.validate")" = 3 ] || fail "validate含最终ZIP核验与一次重试"
+pass "票据网络错误有限重试后执行最终ZIP核验"
+
+prepare
+if notarize FAKE_STAPLER_NETWORK_FAILURES=99; then fail "票据网络错误耗尽后必须失败"; fi
+[ "$(cat "$work/calls.staple")" = 3 ] || fail "票据网络重试必须有上限"
 unchanged
-pass "缓存延迟不能掩盖无效签名"
+pass "票据重试耗尽保留原归档"
 
 prepare
 if notarize FAKE_NOTARY_STATUS='In Progress' FAKE_WAIT_EXIT=75; then fail "等待超时必须失败"; fi

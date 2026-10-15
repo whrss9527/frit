@@ -1,0 +1,6 @@
+# CI 固定的 actionlint 1.7.7 尚未收录这两个有效的 GitHub hosted runner 标签。
+# 仅补充已使用的名称，保留其他 workflow 检查。
+self-hosted-runner:
+  labels:
+    - macos-26
+    - macos-15-intel

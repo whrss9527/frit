@@ -27,7 +27,7 @@ case "$1 $2" in
     case " $* " in *' --keychain-profile frit-notary '*) ;; *) exit 99 ;; esac
     case "$2" in
       submit) printf '{"id":"test"}\n' ;;
-      wait) printf '{"status":"Accepted"}\n' ;;
+      wait) printf '{"status":"Accepted"}\n'; exit 77 ;;
       log) printf '{}\n' ;;
     esac
     ;;
@@ -52,13 +52,15 @@ run() {
     FRIT_TEST_CALLS="$work/calls" FRIT_TEST_STORE_EXIT=0 "$@" "$script" "$work/Sample.zip" > "$work/log" 2>&1
 }
 fail() { cat "$work/log" >&2; echo "失败：$*" >&2; exit 1; }
-run || fail "profile 公证流程应该通过"
+# 本夹具只测凭据：wait 固定退出77，在归档验收之前结束；真实归档路径由独立回归覆盖。
+if run; then fail "等待夹具应以77结束"; fi
+grep -q '退出状态 77' "$work/log" || fail "未完成profile提交/等待路径"
 grep -q '^notarytool store-credentials ' "$work/calls" || fail "未创建 profile"
 grep -q '^notarytool submit .*--keychain-profile' "$work/calls" || fail "提交未使用 profile"
 grep -q '^notarytool wait .*--keychain-profile' "$work/calls" || fail "等待未使用 profile"
-grep -q '^security delete-keychain$' "$work/calls" || fail "成功后未清理钥匙串"
+grep -q '^security delete-keychain$' "$work/calls" || fail "等待结束后未清理钥匙串"
 if grep -q test-password "$work/calls"; then fail "密码泄漏到调用参数"; fi
-echo "通过：stdin 存储密码，后续使用 profile，成功后清理"
+echo "通过：stdin 存储密码，后续使用 profile，等待结束后清理"
 if run FRIT_TEST_STORE_EXIT=5; then fail "凭据存储失败应终止"; fi
 grep -q '^security delete-keychain$' "$work/calls" || fail "失败后未清理钥匙串"
 if grep -q '^notarytool submit ' "$work/calls"; then fail "凭据失败后继续提交"; fi

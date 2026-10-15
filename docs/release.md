@@ -11,6 +11,8 @@ App 仓库调用 Frit 的 `release-app.yml` 发版。仓库的 Secrets 里有 De
 
 下面是一次性的准备工作，大约半小时。**同一套证书和凭据要在每个 App 仓库里各填一遍**（个人账号没有组织级的 Secrets）。
 
+公证验收会检查所有架构的完整签名，核对根程序每个架构的 CDHash 是否包含在已经由 stapler 校验的票据中，并要求 Gatekeeper 策略启用、没有覆盖、来源明确为 `Notarized Developer ID`。重打包后的最终 ZIP 会重新解压执行同样检查，通过后才原子替换本地原归档。`stapler` 的 68 网络查询错误最多重试三次，其他错误立即失败；系统仍拒绝时保留诊断并停止。这里的 CDHash 对照不单独证明票据真实性，必须先通过原生 stapler 校验；也不代替各架构的真实系统验收。
+
 ## 一、加入 Apple Developer Program
 
 用 Apple ID 在 [developer.apple.com/programs/enroll](https://developer.apple.com/programs/enroll/) 或 Apple Developer App 里以**个人**身份注册，年费 99 美元（中国大陆 688 元）。Apple ID 需要开启双重认证。审核通过后会收到邮件。

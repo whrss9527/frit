@@ -109,6 +109,39 @@ jobs:
       - name: Frit 版本标签的 CI 门槛测试
         run: Tests/release/test-tag-ci.sh
 
+  notarized-archive:
+    name: 公开归档只读验收（${{ matrix.os }}）
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15-intel]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 下载固定已公开归档并核对摘要
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/notarized-probe"
+          cd "$RUNNER_TEMP/notarized-probe"
+          gh release download v0.12.14 --repo whrss9527/meno --pattern Meno.zip --pattern SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS.txt
+          echo 'dc642a0c4a155ed78746f5ed18dac378dc73822d893e5341771f4bfa37f5e65e  Meno.zip' | shasum -a 256 -c -
+          ditto -x -k Meno.zip extracted
+      - name: 原生签名、票据覆盖和 Gatekeeper
+        run: |
+          app="$RUNNER_TEMP/notarized-probe/extracted/Meno.app"
+          xattr -w com.apple.quarantine '0081;00000000;FritCI;' "$app"
+          source scripts/release/notary-validation.sh
+          verify_notarized_app "$app" "$RUNNER_TEMP/notarized-probe/evidence"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: notarized-archive-${{ matrix.os }}
+          path: ${{ runner.temp }}/notarized-probe/evidence
+          if-no-files-found: ignore
+
   release-dry-run:
     name: 发布流程试运行
     # 用示例 App 把可复用的发布工作流从头到尾走一遍（不打标签、不发布），确认 App 仓库调用时能用。
