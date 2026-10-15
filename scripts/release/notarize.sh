@@ -10,6 +10,8 @@
 #   NOTARY_TIMEOUT  最多等苹果处理多久，格式同 notarytool 的 --timeout（30m、1h），默认 45m（发布 job 最长 60 分钟）
 #   SPCTL_TRIES、SPCTL_INTERVAL  钉上票据后系统检查最多试几次、隔几秒，默认 6 次、10 秒（自测时调小）
 set -euo pipefail
+# shellcheck source=scripts/release/notary-validation.sh
+. "$(dirname "$0")/notary-validation.sh"
 umask 077
 
 [ $# -gt 0 ] || { echo "用法：notarize.sh 文件.zip …"; exit 1; }
@@ -20,8 +22,10 @@ interval="${SPCTL_INTERVAL:-10}"
 work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/frit-notary"
 rm -rf "$work" && mkdir -p "$work"
 notary_keychain=""
+archive_work=""
 cleanup() {
   rm -f "$work/AuthKey.p8"
+  if [ -n "$archive_work" ]; then rm -rf "$archive_work"; fi
   if [ -n "$notary_keychain" ]; then
     security delete-keychain "$notary_keychain" >/dev/null 2>&1 || true
   fi
@@ -112,45 +116,22 @@ for zip in "$@"; do
   [ "$count" = "1" ] || { echo "${name} 的最外层应该有且只有一个 .app（找到 ${count} 个）"; exit 1; }
   app="$apps"
   app_name="$(basename "$app")"
-  xcrun stapler staple "$app"
-  xcrun stapler validate "$app"
-  # 刚钉上票据时系统可能还认不出来，隔几秒多试几次。
-  assessed=0
-  for attempt in $(seq 1 "$tries"); do
-    if spctl --assess --type execute --verbose=2 "$app"; then
-      assessed=1
-      break
-    fi
-    echo "  第 ${attempt} 次检查没通过"
-    if [ "$attempt" -lt "$tries" ]; then
-      echo "  ${interval} 秒后再试"
-      sleep "$interval"
-    fi
-  done
-  if [ "$assessed" != 1 ]; then
-    echo "===== 系统检查没通过，详细信息 ====="
-    assessment="$(spctl --assess --type execute -vvv "$app" 2>&1 || true)"
-    echo "$assessment"
-    codesign -dvvv "$app" 2>&1 || true
-    if command -v syspolicy_check >/dev/null; then
-      syspolicy_check distribution "$app" 2>&1 || true
-    fi
-    # 苹果已经通过公证（上面是 Accepted）、票据钉上并核对过、签名完整，只有这台机器的系统检查说「没公证」：
-    # 发布用的 macOS 机器上有时这样（Proxi 0.14.0、0.14.2 都遇到过，同一个镜像别的时候又正常），不拦发布，记一条警告。
-    # 别的原因（签名坏了、证书被吊销、票据核对不过……）照样失败。
-    if grep -q "source=Unnotarized Developer ID" <<< "$assessment" \
-       && codesign --verify --deep --strict "$app" 2>/dev/null \
-       && xcrun stapler validate "$app" >/dev/null 2>&1; then
-      echo "::warning::${name}：公证已通过、票据已钉上，但这台机器的系统检查仍说没有公证，照常发布"
-    else
-      codesign --verify --deep --strict --verbose=2 "$app" 2>&1 || true
-      xcrun stapler validate -v "$app" 2>&1 || true
-      xcrun notarytool log "$id" "${auth[@]}" || true
-      exit 1
-    fi
+  stapler_with_retry staple "$app"
+  if ! verify_notarized_app "$app" "$work/check-before-$i"; then
+    xcrun notarytool log "$id" "${auth[@]}" || true
+    exit 1
   fi
   target="$(cd "$(dirname "$zip")" && pwd)/$name"
-  rm -f "$target"
-  (cd "$dir" && ditto -c -k --keepParent "$app_name" "$target")
+  # 同文件系统暂存，最终 ZIP 验收完成前不删除或覆盖原归档。
+  archive_work="$(mktemp -d "$(dirname "$target")/.frit-notarized.XXXXXX")"
+  pending="$archive_work/$name"
+  (cd "$dir" && ditto -c -k --keepParent "$app_name" "$pending")
+  final="$work/final-$i"
+  mkdir -p "$final"
+  ditto -x -k "$pending" "$final"
+  verify_notarized_app "$final/$app_name" "$work/check-final-$i"
+  mv -f "$pending" "$target"
+  rm -rf "$archive_work"
+  archive_work=""
   echo "${name}：已钉上公证票据"
 done
