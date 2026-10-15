@@ -17,6 +17,10 @@ Frit 是玻璃熔块，做玻璃之前先烧好的基础原料。这几个 App �
 
 模块按功能平铺，统一用 `Frit` 前缀。当前的 FritCore 支持 macOS 13 和 iOS 17，CI 在 Linux/macOS 跑测试，并用 `xcodebuild -destination generic/platform=iOS` 编译验证。后续只在 macOS 上有意义的模块（一键更新、全局快捷键这些）将隔离平台实现。
 
+### 版本号作为集合键
+
+`AppVersion` 沿用 Foundation 的数字比较，因此 `1.2-beta.01` 与 `1.2.0-beta.1` 相等。哈希只使用去掉尾零的数字部分与是否为预发布版，以保持相等版本的 Set/Dictionary 查找正确，不改变比较或描述语义。同一数字版本下的不同预发布标记会共享哈希；大量这类键会增加碰撞和比较成本，不适合作为高吞吐索引。未来改进后缀哈希需要先证明与各平台 Foundation 的 Unicode/数字等价规则一致。
+
 ## 发布流程
 
 ### Frit 版本与引用
