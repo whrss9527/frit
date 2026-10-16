@@ -139,7 +139,16 @@ final class CloudFileTests: XCTestCase {
         do { try await file.update(document(["new": 2]), base: nil) { _, proposed, _ in
             var future = proposed; future.format = 2; return future
         }; XCTFail() } catch { XCTAssertEqual(error as? SyncDocumentError, .newerFormat(2)) }
+        do { try await file.update(document(["new": 2]), base: nil) { _, proposed, _ in
+            var future = proposed; future.content.schema = 2; return future
+        }; XCTFail() } catch { XCTAssertEqual(error as? FixtureError, .innerVersion) }
         XCTAssertEqual(try Data(contentsOf: url), bytes)
+        let missing = root.appendingPathComponent("never-created/sync.json")
+        let newFile = try CloudFile<FileContent>(at: missing)
+        var future = document([:]); future.content.schema = 2
+        do { try await newFile.update(future, base: nil) { _, proposed, _ in proposed }; XCTFail() }
+        catch { XCTAssertEqual(error as? FixtureError, .innerVersion) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missing.deletingLastPathComponent().path))
     }
 
     func testAtomicWriteFailureDoesNotRemoveOriginal() async throws {

@@ -36,7 +36,7 @@ let saved = try await file.update(proposed, base: lastSynced) { base, proposed, 
 }
 ```
 
-每实例独立串行Dispatch队列等待NSFileCoordinator，Swift协作线程/MainActor只等continuation。`read`只在不存在时返回nil；占位、格式、解码与协调错误继续抛出。`update`必须提供合并函数，在协调区内重新读当前文档、检查外层及Content自己的内层格式、执行合并、检查输出并原子写入；不会默认为“最新文档胜出”。有旧式`.文件名.icloud`或系统未下载状态时申请下载并报告notDownloaded，不能当不存在写入。读取至多上限+1字节用于拒绝过大输入；输出超过上限也不落盘。
+每实例独立串行Dispatch队列等待NSFileCoordinator，Swift协作线程/MainActor只等continuation；reconcile是后台同步Sendable回调，只处理值，不访问MainActor上的App状态。`read`只在不存在时返回nil；占位、格式、解码与协调错误继续抛出。`update`必须提供合并函数，在协调区内重新读当前文档、检查外层及Content自己的内层格式、执行合并、以相同Content解码器重新验证编码输出并原子写入；不会默认为“最新文档胜出”。有旧式`.文件名.icloud`或系统未下载状态时申请下载并报告notDownloaded，不能当不存在写入。读取至多上限+1字节用于拒绝过大输入；输出超过上限也不落盘。
 
 调用前已取消不入队；一旦接纳，操作不因Task取消而提前返回，也不声称文件副作用被撤销。协调IO/系统调度没有墙钟截止。未来Engine仍须另行实现会话/操作代际与真实提交边界，不能将这个文件层当作disable之后不会写入的完整保证。
 

@@ -112,6 +112,8 @@ public final class CloudFile<Content: SyncContent>: @unchecked Sendable {
     private func encode(_ document: Document) throws -> Data {
         let data = try document.encoded()
         guard data.count <= maxDocumentBytes else { throw CloudFileError.documentTooLarge(maxDocumentBytes) }
+        // Content的自定义解码器也验证本机/合并输出，不能只保护远端输入。
+        _ = try Document.decode(data, unknownDevice: unknownDevice)
         return data
     }
 }
