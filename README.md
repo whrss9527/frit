@@ -13,7 +13,7 @@ Frit 是玻璃熔块，做玻璃之前先烧好的基础原料。这几个 App �
 | `FritUpdate` | macOS 一键更新核心及公共更新条/更新区、中英文语言覆盖、可选严格检查和保留旧包的原子替换 | 可以用 |
 | `FritUI` | 三种玻璃表面、原生/磨砂按钮、浮动面板与首击/编辑快捷键，见[使用说明](docs/ui.md) | 从 0.5.0 提供；各 App 接入单独验收 |
 | `FritSystem` | Shell、重启回滚和文件日志已提供；全局快捷键和录制控件、登录时启动、通知与权限待扩展 | 开发中 |
-| `FritSync` | iCloud 云盘文件同步 | 计划中 |
+| `FritSync` | 显式URL的后台协调读写与App合并回调；目的格式/占位/大小保护，见[同步说明](docs/sync.md) | 0.7.0候选；冲突版本、迁移、Engine及App接入仍待 |
 
 模块按功能平铺，统一用 `Frit` 前缀。当前的 FritCore 支持 macOS 13 和 iOS 17，CI 在 Linux/macOS 跑测试，并用 `xcodebuild -destination generic/platform=iOS` 编译验证。后续只在 macOS 上有意义的模块（一键更新、全局快捷键这些）将隔离平台实现。
 
