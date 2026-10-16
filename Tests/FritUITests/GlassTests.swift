@@ -25,9 +25,16 @@ final class GlassTests: XCTestCase {
                     }.padding(24)
                 }
                 .environment(\.colorScheme, scheme)
-                .environment(\.colorSchemeContrast, contrast)
                 .frame(width: 400, height: 600)
                 let host = FirstMouseHostingView(rootView: content)
+                let appearance: NSAppearance.Name
+                switch (scheme, contrast) {
+                case (.dark, .increased): appearance = .accessibilityHighContrastDarkAqua
+                case (.dark, _): appearance = .darkAqua
+                case (_, .increased): appearance = .accessibilityHighContrastAqua
+                default: appearance = .aqua
+                }
+                host.appearance = try XCTUnwrap(NSAppearance(named: appearance))
                 host.frame = NSRect(x: 0, y: 0, width: 400, height: 600)
                 host.layoutSubtreeIfNeeded()
                 XCTAssertFalse(host.subviews.isEmpty)
