@@ -123,6 +123,9 @@ final class PanelTests: XCTestCase {
         XCTAssertEqual(editor.string, "original")
         XCTAssertTrue(TextEditingShortcuts.handle(try event("z", flags: [.command, .shift], window: panel), in: panel))
         XCTAssertEqual(editor.string, "original!")
+        editor.undoManager?.removeAllActions()
+        XCTAssertTrue(TextEditingShortcuts.handle(try event("z", flags: .command, window: panel), in: panel))
+        XCTAssertEqual(editor.string, "original!")
     }
 }
 #endif

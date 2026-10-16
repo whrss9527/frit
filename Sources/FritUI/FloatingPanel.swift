@@ -44,7 +44,11 @@ open class FloatingPanel: NSPanel {
         level = unpinnedLevel
     }
 
-    public convenience init(level: NSWindow.Level = .statusBar) {
+    public override convenience init() {
+        self.init(level: .statusBar)
+    }
+
+    public convenience init(level: NSWindow.Level) {
         self.init(contentRect: NSRect(x: 0, y: 0, width: 100, height: 100),
                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         unpinnedLevel = level

@@ -30,16 +30,23 @@ public enum TextEditingShortcuts {
               !editor.hasMarkedText(),
               let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        // NSTextView 不实现 undo:/redo:；使用它当前的管理器，不落到其他窗口动作。
+        if key == "z", flags == .command || flags == [.command, .shift] {
+            let manager = editor.undoManager
+            if flags.contains(.shift) {
+                if manager?.canRedo == true { manager?.redo() }
+            } else if manager?.canUndo == true {
+                manager?.undo()
+            }
+            return true
+        }
         let action: Selector
-        if flags == [.command, .shift], key == "z" {
-            action = Selector(("redo:"))
-        } else if flags == .command {
+        if flags == .command {
             switch key {
             case "x": action = #selector(NSText.cut(_:))
             case "c": action = #selector(NSText.copy(_:))
             case "v": action = #selector(NSText.paste(_:))
             case "a": action = #selector(NSText.selectAll(_:))
-            case "z": action = Selector(("undo:"))
             default: return false
             }
         } else {
