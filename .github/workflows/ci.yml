@@ -109,6 +109,39 @@ jobs:
       - name: Frit 版本标签的 CI 门槛测试
         run: Tests/release/test-tag-ci.sh
 
+  ui:
+    name: 公共 UI（${{ matrix.os }} / ${{ matrix.xcode }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            xcode: '16.4'
+          - os: macos-26
+            xcode: latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 选择 Xcode 16.4
+        if: matrix.xcode == '16.4'
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app
+      - name: 选择最新 Xcode
+        if: matrix.xcode == 'latest'
+        run: scripts/release/select-xcode.sh
+      - name: 原生面板、编辑与玻璃渲染
+        env:
+          FRIT_UI_EVIDENCE: ${{ runner.temp }}/frit-ui
+        run: |
+          xcodebuild -version
+          swift test --filter 'PanelTests|GlassTests'
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: frit-ui-${{ matrix.os }}
+          path: ${{ runner.temp }}/frit-ui
+          if-no-files-found: ignore
+
   notarized-archive:
     name: 公开归档只读验收（${{ matrix.os }}）
     runs-on: ${{ matrix.os }}
