@@ -77,6 +77,27 @@ jobs:
         run: scripts/release/select-xcode.sh
       - name: 单元测试
         run: swift test
+      - name: 原生日志突发测量（含系统日志成本）
+        run: |
+          mkdir -p "$RUNNER_TEMP/frit-filelog"
+          swiftc -O Sources/FritSystem/FileLog.swift Sources/FritSystem/FileLogBuffer.swift \
+            scripts/filelog-burst-probe.swift -o "$RUNNER_TEMP/frit-filelog/probe"
+          git rev-parse HEAD > "$RUNNER_TEMP/frit-filelog/source.txt"
+          sw_vers > "$RUNNER_TEMP/frit-filelog/system.txt"
+          swift --version > "$RUNNER_TEMP/frit-filelog/swift.txt"
+          for count in 1000 10000; do
+            /usr/bin/time -l "$RUNNER_TEMP/frit-filelog/probe" "$count" \
+              > "$RUNNER_TEMP/frit-filelog/burst-$count.json" \
+              2> "$RUNNER_TEMP/frit-filelog/time-$count.txt"
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: frit-filelog-burst
+          path: |
+            ${{ runner.temp }}/frit-filelog/*.json
+            ${{ runner.temp }}/frit-filelog/*.txt
+          if-no-files-found: ignore
       - name: 更新组件 Sample 编译
         run: bash Examples/UpdateSample/make-app.sh
       - name: Sample 实际更新与启动回滚
