@@ -145,6 +145,20 @@ final class FileLogBufferTests: XCTestCase {
         XCTAssertEqual(log.droppedRecords, 0)
     }
 
+    func testEmptyAndFourByteTailStayValidWithMinimalBudgets() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let empty = FileLog(subsystem: "FritTests", fileURL: root.appendingPathComponent("empty.log"), pendingBytes: 64)
+        empty.info("")
+        XCTAssertTrue(empty.tail().hasSuffix("INFO "))
+        let emoji = FileLog(subsystem: "FritTests", fileURL: root.appendingPathComponent("emoji.log"), pendingBytes: 70)
+        emoji.error("🙂🙂") // 6字节的尾部从延续字节开始，只保留一个完整字符。
+        XCTAssertTrue(emoji.tail().hasSuffix("ERROR 🙂"))
+        let bridged = NSString(format: "%@", String(repeating: "外部字符串🙂", count: 1000)) as String
+        emoji.error(bridged)
+        XCTAssertTrue(emoji.tail(lines: 1).hasSuffix("ERROR 🙂"))
+    }
+
     #if os(macOS)
     func testActualSystemAndFileOutputsBothReceiveRedactedMessage() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

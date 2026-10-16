@@ -73,10 +73,18 @@ public struct FileLog: Sendable {
             #endif
             guard fileURL != nil else { return }
             // 只复制有限尾部；不把完整消息捕获在每条 queue.async 闭包里。
-            var bytes = Array(message.utf8.suffix(min(maxSize, buffer.messageLimit)))
-            let start = bytes.firstIndex(where: { $0 & 0xc0 != 0x80 }) ?? bytes.endIndex
-            bytes.removeFirst(start)
-            if buffer.append(Data(bytes), error: level == "ERROR") {
+            let limit = min(maxSize, buffer.messageLimit)
+            let data = message.utf8.withContiguousStorageIfAvailable { bytes -> Data in
+                var start = max(0, bytes.count - limit)
+                while start < bytes.count, bytes[start] & 0xc0 == 0x80 { start += 1 }
+                guard start < bytes.count, let base = bytes.baseAddress else { return Data() }
+                return Data(bytes: base.advanced(by: start), count: bytes.count - start)
+            } ?? {
+                let tail = message.utf8.suffix(limit)
+                let start = tail.firstIndex(where: { $0 & 0xc0 != 0x80 }) ?? tail.endIndex
+                return Data(tail[start...])
+            }()
+            if buffer.append(data, error: level == "ERROR") {
                 queue.async { [self] in drain() }
             }
         }
