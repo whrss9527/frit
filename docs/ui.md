@@ -22,4 +22,6 @@ Button("确定") {}.buttonStyle(FritGlassButtonStyle(prominent: true))
 
 不包含 AuroraBackground、ColorDot、SelectionHighlight、Theme、Pop 的 Motion 或诊断开关，也不声明四 App 的默认外观已相同。
 
+UI CI 在临时托管 Mac 中创建自己的窗口，通过合成器截取并拒绝空白图片，普通单测不请求个人会话的屏幕录制。指定 AppKit 的四种外观不等于切换系统“提高对比度”；附件的 JSON 单独记录真实系统开关。系统辅助功能设置随实际会话验证，不根据文件名冒充通过。
+
 来源：`meno@935888e` 的 `Sources/Meno/UI/Glass/Glass.swift`、`Support/TextEditingShortcuts.swift`；`stox@53deb79` 的 `Sources/Stox/Glass.swift`、`PanelWindow.swift`；`pop@137efa3` 的 `Pop/UI/Glass.swift`。公共化时补充显式初始化、可移除监听、文本编辑器目标和输入法保护。

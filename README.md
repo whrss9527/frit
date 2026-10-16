@@ -11,7 +11,7 @@ Frit 是玻璃熔块，做玻璃之前先烧好的基础原料。这几个 App �
 | 发布流程 | 可复用的 GitHub Actions 工作流 `release-app.yml` 和 `scripts/release/` 里的脚本：从 CHANGELOG.md 定版本、打包、Developer ID 签名、苹果公证、钉票据、按芯片的精简包、校验和、草稿再公开的 Release，以及更新端到端测试用的假发布 | 可以用 |
 | `FritCore` | 只依赖 Foundation 的纯逻辑，Linux 上也能测试：版本比较、发布与附件解析、校验和、安装位置、双语更新说明和容错 JSON | 可以用 |
 | `FritUpdate` | macOS 一键更新核心及公共更新条/更新区、中英文语言覆盖、可选严格检查和保留旧包的原子替换 | 可以用 |
-| `FritUI` | 玻璃材质、卡片、按钮样式、浮动面板 | 计划中 |
+| `FritUI` | 三种玻璃表面、原生/磨砂按钮、浮动面板与首击/编辑快捷键，见[使用说明](docs/ui.md) | 从 0.5.0 提供；各 App 接入单独验收 |
 | `FritSystem` | Shell、重启回滚和文件日志已提供；全局快捷键和录制控件、登录时启动、通知与权限待扩展 | 开发中 |
 | `FritSync` | iCloud 云盘文件同步 | 计划中 |
 
