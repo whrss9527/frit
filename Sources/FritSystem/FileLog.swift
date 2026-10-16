@@ -145,7 +145,21 @@ public struct FileLog: Sendable {
             let watermark = buffer.watermark
             return queue.sync {
                 writeThrough(watermark)
-                guard let fileURL, let content = try? String(contentsOf: fileURL, encoding: .utf8) else { return "" }
+                guard maxLines > 0, let fileURL, let handle = try? FileHandle(forReadingFrom: fileURL) else { return "" }
+                defer { try? handle.close() }
+                // 冷启动或外部写入留下的超大文件也只读配置上限，不先加载整份日志。
+                guard let end = try? handle.seekToEnd() else { return "" }
+                let count = Int(min(end, UInt64(maxSize)))
+                guard (try? handle.seek(toOffset: end - UInt64(count))) != nil else { return "" }
+                var data = Data()
+                while data.count < count {
+                    guard let chunk = try? handle.read(upToCount: min(count - data.count, 64 * 1024)) else { return "" }
+                    if chunk.isEmpty { break }
+                    data.append(chunk)
+                }
+                var start = 0
+                while start < data.count, data[start] & 0xc0 == 0x80 { start += 1 }
+                guard let content = String(data: data[start...], encoding: .utf8) else { return "" }
                 return content.split(separator: "\n").suffix(maxLines).joined(separator: "\n")
             }
         }

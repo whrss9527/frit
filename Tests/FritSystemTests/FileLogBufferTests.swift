@@ -159,6 +159,23 @@ final class FileLogBufferTests: XCTestCase {
         XCTAssertTrue(emoji.tail(lines: 1).hasSuffix("ERROR 🙂"))
     }
 
+    func testColdTailBoundsOversizedExistingFileWithoutRewritingIt() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("old.log")
+        let content = String(repeating: "中文🙂\n", count: 100_000)
+        try content.write(to: url, atomically: true, encoding: .utf8)
+        let log = FileLog(subsystem: "FritTests", fileURL: url, maxSize: 64)
+        let tail = log.tail()
+        XCTAssertFalse(tail.isEmpty)
+        XCTAssertTrue(tail.hasSuffix("中文🙂"))
+        XCTAssertLessThanOrEqual(tail.utf8.count, 64)
+        XCTAssertEqual(try Data(contentsOf: url).count, content.utf8.count)
+        XCTAssertEqual(log.tail(lines: 1), "中文🙂")
+        XCTAssertEqual(log.tail(lines: 0), "")
+    }
+
     #if os(macOS)
     func testActualSystemAndFileOutputsBothReceiveRedactedMessage() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
