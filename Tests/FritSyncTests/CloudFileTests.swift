@@ -23,6 +23,39 @@ private struct FileContent: SyncContent {
     }
 }
 
+/// 真实 Foundation 呈现者，模拟编辑器尚未落盘的修改；不依赖 iCloud 账号。
+private final class SavingFilePresenter: NSObject, NSFilePresenter, @unchecked Sendable {
+    let presentedItemURL: URL?
+    let presentedItemOperationQueue: OperationQueue = {
+        let queue = OperationQueue(); queue.maxConcurrentOperationCount = 1; return queue
+    }()
+    private let lock = NSLock()
+    private var pending: Data?
+    private var saved = false
+    private var deleted = false
+    init(url: URL, unsaved: Data) { presentedItemURL = url; pending = unsaved }
+    var events: (saved: Bool, deleted: Bool) {
+        lock.lock(); defer { lock.unlock() }; return (saved, deleted)
+    }
+    func savePresentedItemChanges(completionHandler: @escaping (Error?) -> Void) {
+        lock.lock(); let data = pending; lock.unlock()
+        guard let data, let url = presentedItemURL else { completionHandler(nil); return }
+        var coordinationError: NSError?
+        var writeError: Error?
+        NSFileCoordinator(filePresenter: self).coordinate(writingItemAt: url, options: [], error: &coordinationError) { url in
+            do { try data.write(to: url, options: .atomic) } catch { writeError = error }
+        }
+        if coordinationError == nil && writeError == nil {
+            lock.lock(); pending = nil; saved = true; lock.unlock()
+        }
+        if let coordinationError { completionHandler(coordinationError) }
+        else { completionHandler(writeError) }
+    }
+    func accommodatePresentedItemDeletion(completionHandler: @escaping (Error?) -> Void) {
+        lock.lock(); deleted = true; lock.unlock(); completionHandler(nil)
+    }
+}
+
 final class CloudFileTests: XCTestCase {
     private typealias Document = SyncDocument<FileContent>
     private func directory() throws -> URL {
@@ -67,6 +100,26 @@ final class CloudFileTests: XCTestCase {
             return merged
         }
         XCTAssertEqual(result.content.values, ["base": 1, "local": 3, "remote": 2])
+    }
+
+    func testUpdateSavesPresentedChangesBeforeReadingAndDoesNotRequestDeletion() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("sync.json")
+        try document(["base": 1]).encoded().write(to: url)
+        let presenter = SavingFilePresenter(url: url, unsaved: try document(["base": 1, "editor": 2]).encoded())
+        NSFileCoordinator.addFilePresenter(presenter)
+        defer { NSFileCoordinator.removeFilePresenter(presenter) }
+        let file = try CloudFile<FileContent>(at: url)
+        let result = try await file.update(document(["base": 1, "local": 3]), base: FileContent(["base": 1])) { _, proposed, current in
+            XCTAssertEqual(current?.content.values["editor"], 2)
+            var merged = proposed
+            if let current { merged.content = proposed.content.merging(cloud: current.content) }
+            return merged
+        }
+        XCTAssertEqual(result.content.values, ["base": 1, "editor": 2, "local": 3])
+        XCTAssertEqual(try Document.decode(Data(contentsOf: url)).content.values, result.content.values)
+        XCTAssertTrue(presenter.events.saved)
+        XCTAssertFalse(presenter.events.deleted)
     }
 
     func testIndependentInstancesSerializeConcurrentReadModifyWrites() async throws {

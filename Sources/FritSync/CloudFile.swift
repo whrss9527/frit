@@ -55,7 +55,8 @@ public final class CloudFile<Content: SyncContent>: @unchecked Sendable {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             var error: NSError?
             var result: Result<Document, Error>?
-            NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forReplacing, error: &error) { writeURL in
+            // 更新同一文档：先让呈现者保存未提交修改；forReplacing 表示删除/替换另一个项目。
+            NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forMerging, error: &error) { writeURL in
                 result = Result {
                     let current = try self.load(at: writeURL)
                     let merged = try reconcile(base, proposed, current)
