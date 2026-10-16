@@ -55,9 +55,25 @@ final class ShellLifecycleTests: XCTestCase {
     }
     private func assertEscapedAlive(_ root: URL, _ pid: pid_t) async throws {
         XCTAssertEqual(kill(pid, 0), 0)
-        let before = try heartbeat(root)
-        try await Task.sleep(nanoseconds: 100_000_000)
-        XCTAssertGreaterThan(try heartbeat(root), before, "心跳必须继续，kill(0) 不能区分僵尸进程")
+        // 两轮新挑战拒绝旧应答；等待实际握手，而不是猜进程会在固定100ms内获调度。
+        // 五秒与fixture原有就绪等待一致，不改变上方Shell截止/四秒断言。
+        for _ in 0..<2 {
+            let before = try heartbeat(root)
+            let token = UUID().uuidString
+            let response = root.appendingPathComponent("liveness.response")
+            try "stale".write(to: response, atomically: true, encoding: .utf8)
+            try token.write(to: root.appendingPathComponent("liveness.request"), atomically: true, encoding: .utf8)
+            let clock = ContinuousClock()
+            let deadline = clock.now.advanced(by: .seconds(5))
+            while (try? String(contentsOf: response, encoding: .utf8)) != token {
+                guard clock.now < deadline else {
+                    XCTFail("逃逸后代没有处理新挑战，PID或旧心跳不能证明活性")
+                    return
+                }
+                try await Task.sleep(nanoseconds: 5_000_000)
+            }
+            XCTAssertGreaterThan(try heartbeat(root), before, "应答前必须真正推进心跳")
+        }
     }
 
     func testPreCancelledTaskNeverLaunches() async throws {
@@ -130,7 +146,7 @@ final class ShellLifecycleTests: XCTestCase {
         }
     }
 
-    func testSyncDeadlineAlsoClosesEscapedPipe() throws {
+    func testSyncDeadlineAlsoClosesEscapedPipe() async throws {
         let root = try directory(), executable = try command()
         let start = Date()
         XCTAssertThrowsError(try Shell.runSync(executable, ["escape-err", root.path], timeout: 0.1)) {
@@ -140,10 +156,7 @@ final class ShellLifecycleTests: XCTestCase {
         let escaped = try identity(root, "child.pid")
         defer { kill(escaped.pid, SIGKILL) }
         assertReaped(try identity(root).pid)
-        XCTAssertEqual(kill(escaped.pid, 0), 0)
-        let before = try heartbeat(root)
-        usleep(100_000)
-        XCTAssertGreaterThan(try heartbeat(root), before)
+        try await assertEscapedAlive(root, escaped.pid)
     }
 
     func testOwnedChildIsKilledAfterDirectParentExits() async throws {

@@ -38,6 +38,25 @@ static void heartbeat(const char *root, unsigned long value) {
     fprintf(f, "%lu", value); fclose(f);
     if (rename(temporary, path)) _exit(98);
 }
+// 只有实际运行的后代能回答返回后发出的新挑战，PID存在或旧心跳都不能冒充活性。
+static void answer_challenge(const char *root, unsigned long *count, char *previous) {
+    char path[4096], temporary[4096], token[128];
+    snprintf(path, sizeof(path), "%s/liveness.request", root);
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    char *read = fgets(token, sizeof(token), f);
+    fclose(f);
+    if (!read || !token[0] || !strcmp(previous, token)) return;
+    // 应答提交前先推进心跳，保持Swift侧原有的增长断言。
+    heartbeat(root, ++*count);
+    snprintf(path, sizeof(path), "%s/liveness.response", root);
+    snprintf(temporary, sizeof(temporary), "%s/liveness.response.tmp", root);
+    f = fopen(temporary, "w");
+    if (!f) _exit(99);
+    fputs(token, f);
+    if (fclose(f) || rename(temporary, path)) _exit(100);
+    strcpy(previous, token);
+}
 static void write_all(int fd, const char *p, size_t n) {
     while (n) {
         ssize_t r = write(fd, p, n);
@@ -105,8 +124,13 @@ int main(int argc, char **argv) {
             close(handshake[1]);
             if (strncmp(mode, "escape-", 7) == 0 || !strcmp(mode, "owned-exit")) {
                 unsigned long count = 0;
+                char previous[128] = "";
                 struct timespec delay = {0, 20000000};
-                while (1) { heartbeat(root, ++count); nanosleep(&delay, NULL); }
+                while (1) {
+                    heartbeat(root, ++count);
+                    answer_challenge(root, &count, previous);
+                    nanosleep(&delay, NULL);
+                }
             }
             while (1) pause();
         }
