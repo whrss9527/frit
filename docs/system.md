@@ -20,23 +20,13 @@ Task 在调用前已取消时不启动命令；运行中取消会抛 `Cancellati
 
 ## FileLog
 
-```swift
-let log = FileLog(
-    subsystem: "io.github.whrss9527.pop",
-    fileURL: logURL,
-    maxSize: 1 << 20,
-    redact: { text in text.replacingOccurrences(of: "secret", with: "[redacted]") },
-    messagePrefix: "Pop 更新："
-)
-log.info("开始检查")
-log.error("检查失败")
-log.flush()
-let recent = log.tail(lines: 200)
-```
+`FileLog(subsystem:fileURL:maxSize:redact:messagePrefix:pendingBytes:pendingRecords:)` 的副本共享一份有界缓冲与串行文件队列。默认待写预算256KiB/256条；字节预算包含消息数据及每条64字节记账，条数另约束元数据开销，不是RSS精确上限。单条最多64KiB，并按文件/缓冲预算进一步缩小；UTF-8尾部截断在入队前完成。运行中的批次仍计入总预算，普通drain每轮最多32条，只安排一条后续工作。
 
-macOS 的系统日志与文件使用同一份脱敏结果，前缀也脱敏。fileURL 为 nil 时只写系统日志。实例副本共享串行队列，DateFormatter 和文件操作限制在该队列上；`flush` 和 `tail` 会先等前面的写入完成。
+前缀和原消息先一起脱敏；macOS系统日志收到完整脱敏文本，文件收到同一结果的有界尾部。nil文件路径只写系统日志，不排队。文件继续按`maxSize`轮转及保留有效UTF-8尾部，写入失败仍为尽力记录。
 
-默认上限 1 MiB：追加将超过上限时清空旧日志。单条过长日志保留末尾并避开 UTF-8 字符中间，文件大小仍受限制。文件无法写入时保留原来的尽力记录行为，系统日志继续可用。
+过载先淘汰待写的较旧INFO；新INFO不会挤掉待写ERROR，全是ERROR时新ERROR可淘汰较旧待写ERROR。正在写的批次不可淘汰，预算被它占满时任何新记录都可能丢弃。丢弃按级别用饱和计数，后续文件写入有一条不带原消息的`FileLog dropped INFO=… ERROR=…`摘要；`droppedRecords`返回累计过载丢弃数，文件轮转/磁盘错误另计。保留下来的原记录按锁内接受顺序写入；摘要汇总发生在快照之前的丢弃，不表示原消息的位置。
+
+`flush()`与`tail(lines:)`捕获调用时水位，在串行队列内处理一份有界快照。此前已接受的记录要么已写/尝试写入，要么已明确计入过载丢弃；不等待以后生产的日志或缓冲彻底为空。`tail`随后读取有限文件最后若干行。它们仍同步等待有限批次的磁盘IO，没有磁盘卡死时的墙钟截止或fsync持久化保证，界面避免高频同步调用。负数行数当作0；负预算钳制到64字节/1条。
 
 ## Relauncher
 
