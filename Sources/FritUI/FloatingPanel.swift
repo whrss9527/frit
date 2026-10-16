@@ -44,7 +44,7 @@ open class FloatingPanel: NSPanel {
         level = unpinnedLevel
     }
 
-    public override convenience init() {
+    public convenience init() {
         self.init(level: .statusBar)
     }
 
