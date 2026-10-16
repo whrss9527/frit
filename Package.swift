@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "FritCore", targets: ["FritCore"]),
         .library(name: "FritUI", targets: ["FritUI"]),
         .library(name: "FritSystem", targets: ["FritSystem"]),
+        .library(name: "FritSync", targets: ["FritSync"]),
         .library(name: "FritUpdate", targets: ["FritUpdate"]),
     ],
     targets: [
@@ -18,6 +19,7 @@ let package = Package(
         .target(name: "FritCore"),
         .target(name: "FritUI"),
         .target(name: "FritSystem", dependencies: ["FritCore"]),
+        .target(name: "FritSync", dependencies: ["FritCore"]),
         // 文案源由生成器处理；Xcode 后端不能同时编译 catalog 和生成的 strings。
         .target(name: "FritUpdate", dependencies: ["FritCore", "FritSystem"], exclude: ["Resources/Localizable.xcstrings"], resources: [
             .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj"), .process("Resources/zh-Hant.lproj"),
@@ -25,6 +27,7 @@ let package = Package(
         .testTarget(name: "FritUITests", dependencies: ["FritUI"]),
         .testTarget(name: "FritCoreTests", dependencies: ["FritCore"]),
         .testTarget(name: "FritSystemTests", dependencies: ["FritSystem"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "FritSyncTests", dependencies: ["FritSync", "FritCore"]),
         .testTarget(name: "FritUpdateTests", dependencies: ["FritUpdate"]),
     ]
 )

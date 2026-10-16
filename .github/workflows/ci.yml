@@ -94,6 +94,10 @@ jobs:
         run: >-
           xcodebuild -scheme FritCore -destination 'generic/platform=iOS'
           -derivedDataPath "$RUNNER_TEMP/frit-ios" CODE_SIGNING_ALLOWED=NO build
+      - name: 编译 iOS 17 的协调文件层
+        run: >-
+          xcodebuild -scheme FritSync -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/frit-sync-ios" CODE_SIGNING_ALLOWED=NO build
       - name: 更新验证入口测试（macOS 自带的 bash 3.2）
         run: Tests/release/test-update-e2e.sh
       - name: 签名团队与公证凭据测试
@@ -134,7 +138,7 @@ jobs:
           FRIT_UI_EVIDENCE: ${{ runner.temp }}/frit-ui
         run: |
           xcodebuild -version
-          swift test --filter 'PanelTests|GlassTests'
+          swift test --filter 'PanelTests|GlassTests|CloudFileTests'
       - uses: actions/upload-artifact@v7
         if: always()
         with:
