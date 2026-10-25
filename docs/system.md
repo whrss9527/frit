@@ -1,36 +1,32 @@
 # 最小 FritSystem
 
-变更先记在 Unreleased，随下一次 0.2.0 定版提供 FritUpdate 需要的 Shell、Relauncher 和 FileLog。macOS 可用全部 API；Linux 编译 Shell、文件日志和回滚脚本测试；iOS 暂时编译为空模块。
+macOS 可用全部 API；Linux 编译 Shell、文件日志和回滚脚本测试；iOS 暂时编译为空模块。
 
 ## Shell
 
-`Shell.run(_:_:timeout:) async throws -> ShellResult` 在 Dispatch 工作线程上运行进程、读取 stdout/stderr 和等待退出，Swift 协作线程只等待 continuation。同步入口 `runSync` 会阻塞调用线程，界面代码用异步入口。
+`Shell.run(_:_:timeout:) async throws -> ShellResult` 用单个 Dispatch worker 同时观察进程退出、读取 stdout/stderr、取消和单调截止时间，Swift 协作线程只等待 continuation。同步入口 `runSync` 等待同一个 worker，会阻塞调用线程；界面代码用异步入口。
 
-参数直接交给 Process，不通过 shell 拼接。超时先发 SIGTERM，两秒后发 SIGKILL；Foundation 给子进程建立了独立进程组时会结束整组，避免 shell 子进程继续持有输出管道。不能确认独立组时只处理该进程。计时器使用加锁的标记，进程自行收到信号退出不会被误判为超时。
+参数直接交给 `posix_spawn`，不通过 shell 拼接；stdin 为 `/dev/null`，stdout/stderr 合并。启动时为直接子进程建立独立组并确认 PGID；超时或运行中取消先发 SIGTERM，两秒后发 SIGKILL。只向已确认属于本次执行的组发信号，不能确认独立组时只处理直接子进程。直接子进程的退出先由 `waitid(WNOWAIT)` 观察；关闭读取后才 `waitpid` 回收，避免在信号清理期间 PID 被复用。自行收到信号退出仍返回非零 `status`，不会被误判为超时。
+
+Task 在调用前已取消时不启动命令；运行中取消会抛 `CancellationError`，取消不会撤销已经完成的外部副作用。调用方若捕获后忽略取消，仍应自己决定是否继续业务流程。更新的文件替换事务不在中途插入取消。
+
+读取使用非阻塞 FD，每轮最多读取 1 MiB，随后重新观察取消和截止时间；等待使用最长 50ms 的 POSIX poll，EOF 后等待时不再 poll 已关闭的输出流。每个正在执行的调用占用一个 Dispatch worker，正常空闲等待每秒约 20 次短 poll，信号或管道事件可提前唤醒；等待期间取消最多增加一次 50ms poll 的观察延迟（另有读取、启动和调度开销）；24 个并发调用和 40 次并发退出/取消由真实 fixture 验证。即使后代创建新的 session/进程组并持有 stdout 或 stderr，超时或取消也会在两秒终止宽限后关闭本执行器的读取端、回收直接 child，再返回；不会等待逃逸后代的 EOF，也不追杀逃逸组或任意 PID。正常操作系统进程终止与调度下，等待上限为 `timeout + 2 秒` 加短 poll/调度延迟（取消则为请求被观察后两秒），不承诺清理已经逃逸的进程或撤销其副作用。没有返回后继续排空输出的 Swift Task 或 IO 回调。
 
 `ShellResult` 提供 `output`、`status`、`succeeded` 和 `trimmedOutput`。启动失败和超时分别抛 `ShellError.launchFailed` / `.timeout`。
+
+输出最多保留末尾 8 MiB，超过后在 `output` 开头显示 `[输出已截断，仅保留末尾 8 MiB]` 和换行；标记计入返回字符串的 UTF-8 容量，非法 UTF-8 替代字符膨胀后也再次限制容量。有效 Unicode 尾部不会从多字节字符中间开始。未超过上限的小输出保持完整。需要完整大文件的命令应自行写文件，此接口用于命令结果和诊断。
 
 `lookPath` 查 PATH 并补常见系统和 Homebrew 目录；也可验证指定路径。`shellQuote` 和 `appleScriptString` 用于确实需要脚本的场景，普通执行仍直接传 argv。
 
 ## FileLog
 
-```swift
-let log = FileLog(
-    subsystem: "io.github.whrss9527.pop",
-    fileURL: logURL,
-    maxSize: 1 << 20,
-    redact: { text in text.replacingOccurrences(of: "secret", with: "[redacted]") },
-    messagePrefix: "Pop 更新："
-)
-log.info("开始检查")
-log.error("检查失败")
-log.flush()
-let recent = log.tail(lines: 200)
-```
+`FileLog(subsystem:fileURL:maxSize:redact:messagePrefix:pendingBytes:pendingRecords:)` 的副本共享一份有界缓冲与串行文件队列。默认待写预算256KiB/256条；字节预算包含消息数据及每条64字节记账，条数另约束元数据开销，不是RSS精确上限。单条最多64KiB，并按文件/缓冲预算进一步缩小；UTF-8尾部截断在入队前完成。运行中的批次仍计入总预算，普通drain每轮最多32条，只安排一条后续工作。
 
-macOS 的系统日志与文件使用同一份脱敏结果，前缀也脱敏。fileURL 为 nil 时只写系统日志。实例副本共享串行队列，DateFormatter 和文件操作限制在该队列上；`flush` 和 `tail` 会先等前面的写入完成。
+前缀和原消息先一起脱敏；macOS系统日志收到完整脱敏文本，文件收到同一结果的有界尾部。nil文件路径只写系统日志，不排队。文件继续按`maxSize`轮转及保留有效UTF-8尾部，写入失败仍为尽力记录。
 
-默认上限 1 MiB：追加将超过上限时清空旧日志。单条过长日志保留末尾并避开 UTF-8 字符中间，文件大小仍受限制。文件无法写入时保留原来的尽力记录行为，系统日志继续可用。
+过载先淘汰待写的较旧INFO；新INFO不会挤掉待写ERROR，全是ERROR时新ERROR可淘汰较旧待写ERROR。正在写的批次不可淘汰，预算被它占满时任何新记录都可能丢弃。丢弃按级别用饱和计数，后续文件写入有一条不带原消息的`FileLog dropped INFO=… ERROR=…`摘要；`droppedRecords`返回累计过载丢弃数，文件轮转/磁盘错误另计。保留下来的原记录按锁内接受顺序写入；摘要汇总发生在快照之前的丢弃，不表示原消息的位置。
+
+`flush()`与`tail(lines:)`捕获调用时水位，在串行队列内处理一份有界快照。此前已接受的记录要么已写/尝试写入，要么已明确计入过载丢弃；不等待以后生产的日志或缓冲彻底为空。`tail`最多读取文件最后`maxSize`字节、跳过开头的UTF-8延续字节再取若干行；冷启动或外部写入的超大旧文件也不先全量加载，读取本身不重写该文件。它们仍同步等待有限批次的磁盘IO，没有磁盘卡死时的墙钟截止或fsync持久化保证，界面避免高频同步调用。负数行数当作0；负预算钳制到64字节/1条。
 
 ## Relauncher
 
@@ -43,4 +39,4 @@ helper 将 bundle、旧进程 ID 和旧副本路径作为 argv 传入 `/bin/sh`�
 - Proxi `f765bf4f2cbcb25c49bfd1c81997d5781c352529`，`Sources/Proxi/System/Shell.swift` 和 `Log.swift`：进程输出、超时、查找命令、引用、系统日志、串行文件日志、脱敏和 tail。异步入口改为 Dispatch，脱敏函数和日志位置改为注入；不迁入 Proxi 的 Store。
 - Meno `51c118699e56454df23ffa8eee80ac1a4cfae457`，`Sources/Meno/Support/Relauncher.swift`：helper 脚本保持原行为，公开 bundle 参数，替换 App 专有的 PID 和日志引用。
 
-`swift test` 覆盖输出超过管道容量、参数引用、启动失败、自发信号、SIGTERM 忽略和子进程管道超时，日志脱敏、前缀、截断、UTF-8 和同步读取，以及 `bash -n` 与假 bundle 的正常重启、成功更新、未启动和 open 失败的回滚。Linux 验证脚本和通用逻辑；macOS CI 还编译实际 AppKit / os.Logger 入口并运行这些测试。
+`swift test` 覆盖预取消、运行取消不续下一条命令、重复取消与退出竞态、直接 PID 回收、owned group 与其他进程隔离、组长先退出后子进程的超时清理、分别逃逸 stdout/stderr 的硬截止、连续洪流、公平读取、24 个并发命令、8 MiB 尾部与非法 UTF-8、同步入口及重复执行后的 FD 关闭。独立 C fixture 在子进程内 fork/setsid，心跳区分仍运行的后代和僵尸进程，测试需要系统 C 编译器。既有日志、引用、启动失败、自发信号、SIGTERM 忽略、回滚脚本与假 bundle 测试继续执行；macOS CI 还编译实际 AppKit / os.Logger 入口并运行原生更新验证。

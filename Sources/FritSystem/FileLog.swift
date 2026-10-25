@@ -4,22 +4,35 @@ import Foundation
 import os
 #endif
 
-/// 副本共享一条串行队列；格式化和文件读写都在这条队列内完成。
+/// 副本共享有界缓冲与串行写队列；过载优先淘汰待写的较旧 INFO，并记录计数摘要。
 public struct FileLog: Sendable {
     private let storage: Storage
 
     public init(subsystem: String, fileURL: URL? = nil, maxSize: Int = 1 << 20,
-                redact: @escaping @Sendable (String) -> String = { $0 }, messagePrefix: String = "") {
+                redact: @escaping @Sendable (String) -> String = { $0 }, messagePrefix: String = "",
+                pendingBytes: Int = 256 * 1024, pendingRecords: Int = 256) {
         storage = Storage(subsystem: subsystem, fileURL: fileURL, maxSize: max(maxSize, 1),
-                          redact: redact, prefix: messagePrefix)
+                          redact: redact, prefix: messagePrefix, pendingBytes: pendingBytes,
+                          pendingRecords: pendingRecords)
     }
 
     public func info(_ message: String) { storage.append("INFO", message) }
     public func error(_ message: String) { storage.append("ERROR", message) }
-    public func flush() { storage.queue.sync {} }
+    /// 累计过载丢弃条数（饱和计数）；文件轮转和写入失败不在此计数内。
+    public var droppedRecords: UInt64 { storage.buffer.droppedRecords }
+    public func flush() { storage.flush() }
     public func tail(lines: Int = 200) -> String { storage.tail(lines: max(lines, 0)) }
 
-    /// 可变状态全部限于 queue；其他成员初始化后不变。
+    // 仅测试用于确定性地阻塞实际文件写入，不扩展公开的日志回调接口。
+    init(fileURL: URL, pendingBytes: Int, pendingRecords: Int,
+         redact: @escaping @Sendable (String) -> String = { $0 },
+         beforeFileWrite: @escaping @Sendable () -> Void) {
+        storage = Storage(subsystem: "FritTests", fileURL: fileURL, maxSize: 1 << 20,
+                          redact: redact, prefix: "",
+                          pendingBytes: pendingBytes, pendingRecords: pendingRecords, beforeFileWrite: beforeFileWrite)
+    }
+
+    /// buffer 有自己的锁；formatter 与文件操作限于 queue。
     private final class Storage: @unchecked Sendable {
         let queue: DispatchQueue
         let fileURL: URL?
@@ -27,16 +40,22 @@ public struct FileLog: Sendable {
         let redact: @Sendable (String) -> String
         let prefix: String
         let formatter: DateFormatter
+        let buffer: FileLogBuffer
+        let beforeFileWrite: (@Sendable () -> Void)?
         #if canImport(os)
         let logger: Logger
         #endif
 
-        init(subsystem: String, fileURL: URL?, maxSize: Int, redact: @escaping @Sendable (String) -> String, prefix: String) {
+        init(subsystem: String, fileURL: URL?, maxSize: Int, redact: @escaping @Sendable (String) -> String,
+             prefix: String, pendingBytes: Int, pendingRecords: Int,
+             beforeFileWrite: (@Sendable () -> Void)? = nil) {
             queue = DispatchQueue(label: subsystem + ".log")
             self.fileURL = fileURL
             self.maxSize = maxSize
             self.redact = redact
             self.prefix = prefix
+            buffer = FileLogBuffer(bytes: pendingBytes, records: pendingRecords)
+            self.beforeFileWrite = beforeFileWrite
             formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
@@ -52,32 +71,95 @@ public struct FileLog: Sendable {
             if level == "ERROR" { logger.error("\(message, privacy: .public)") }
             else { logger.info("\(message, privacy: .public)") }
             #endif
-            queue.async { [self] in
-                guard let url = fileURL else { return }
-                let line = "\(formatter.string(from: Date())) \(level) \(message)\n"
-                var data = Data(line.utf8)
-                // 单条过大的日志也不能突破上限，切分点跳过 UTF-8 延续字节。
-                if data.count > maxSize {
-                    var start = data.count - maxSize
-                    while start < data.count, data[start] & 0xc0 == 0x80 { start += 1 }
-                    data = Data(data[start...])
-                }
-                let manager = FileManager.default
-                try? manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                let size = (try? manager.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
-                if size > maxSize - data.count { try? manager.removeItem(at: url) }
-                if let handle = try? FileHandle(forWritingTo: url) {
-                    defer { try? handle.close() }
-                    do { try handle.seekToEnd(); try handle.write(contentsOf: data) } catch { }
-                } else {
-                    try? data.write(to: url, options: .atomic)
-                }
+            guard fileURL != nil else { return }
+            // 只复制有限尾部；不把完整消息捕获在每条 queue.async 闭包里。
+            let limit = min(maxSize, buffer.messageLimit)
+            let data = message.utf8.withContiguousStorageIfAvailable { bytes -> Data in
+                var start = max(0, bytes.count - limit)
+                while start < bytes.count, bytes[start] & 0xc0 == 0x80 { start += 1 }
+                guard start < bytes.count, let base = bytes.baseAddress else { return Data() }
+                return Data(bytes: base.advanced(by: start), count: bytes.count - start)
+            } ?? {
+                let tail = message.utf8.suffix(limit)
+                let start = tail.firstIndex(where: { $0 & 0xc0 != 0x80 }) ?? tail.endIndex
+                return Data(tail[start...])
+            }()
+            if buffer.append(data, error: level == "ERROR") {
+                queue.async { [self] in drain() }
             }
         }
 
+        private func drain() {
+            let batch = buffer.take()
+            write(batch)
+            if buffer.finish(batch, reschedule: true) {
+                queue.async { [self] in drain() }
+            }
+        }
+
+        private func write(_ batch: FileLogBuffer.Batch) {
+            for record in batch.records {
+                let level = record.error ? "ERROR" : "INFO"
+                let message = String(decoding: record.message, as: UTF8.self)
+                writeLine("\(formatter.string(from: record.date)) \(level) \(message)\n")
+            }
+            if batch.drops.any {
+                writeLine("\(formatter.string(from: Date())) WARN FileLog dropped INFO=\(batch.drops.info) ERROR=\(batch.drops.error)\n")
+            }
+        }
+
+        private func writeLine(_ line: String) {
+            guard let url = fileURL else { return }
+            beforeFileWrite?()
+            var data = Data(line.utf8)
+            // 最终文件仍遵守原 maxSize 与 UTF-8 尾部截断语义。
+            if data.count > maxSize {
+                var start = data.count - maxSize
+                while start < data.count, data[start] & 0xc0 == 0x80 { start += 1 }
+                data = Data(data[start...])
+            }
+            let manager = FileManager.default
+            try? manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let size = (try? manager.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
+            if size > maxSize - data.count { try? manager.removeItem(at: url) }
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                do { try handle.seekToEnd(); try handle.write(contentsOf: data) } catch { }
+            } else {
+                try? data.write(to: url, options: .atomic)
+            }
+        }
+
+        func flush() {
+            let watermark = buffer.watermark
+            queue.sync { writeThrough(watermark) }
+        }
+
+        private func writeThrough(_ watermark: UInt64) {
+            let batch = buffer.take(upTo: watermark, limit: buffer.recordLimit)
+            write(batch)
+            _ = buffer.finish(batch, reschedule: false)
+        }
+
         func tail(lines maxLines: Int) -> String {
-            queue.sync {
-                guard let fileURL, let content = try? String(contentsOf: fileURL, encoding: .utf8) else { return "" }
+            let watermark = buffer.watermark
+            return queue.sync {
+                writeThrough(watermark)
+                guard maxLines > 0, let fileURL, let handle = try? FileHandle(forReadingFrom: fileURL) else { return "" }
+                defer { try? handle.close() }
+                // 冷启动或外部写入留下的超大文件也只读配置上限，不先加载整份日志。
+                guard let end = try? handle.seekToEnd() else { return "" }
+                let count = Int(min(end, UInt64(maxSize)))
+                guard (try? handle.seek(toOffset: end - UInt64(count))) != nil else { return "" }
+                var data = Data()
+                while data.count < count {
+                    guard let chunk = try? handle.read(upToCount: min(count - data.count, 64 * 1024)) else { return "" }
+                    if chunk.isEmpty { break }
+                    data.append(chunk)
+                }
+                var start = 0
+                while start < data.count, data[start] & 0xc0 == 0x80 { start += 1 }
+                guard let content = String(data: data[start...], encoding: .utf8) else { return "" }
                 return content.split(separator: "\n").suffix(maxLines).joined(separator: "\n")
             }
         }

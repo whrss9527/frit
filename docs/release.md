@@ -11,6 +11,8 @@ App 仓库调用 Frit 的 `release-app.yml` 发版。仓库的 Secrets 里有 De
 
 下面是一次性的准备工作，大约半小时。**同一套证书和凭据要在每个 App 仓库里各填一遍**（个人账号没有组织级的 Secrets）。
 
+公证验收会检查所有架构的完整签名，核对根程序每个架构的 CDHash 是否包含在已经由 stapler 校验的票据中，并要求 Gatekeeper 策略启用、没有覆盖、来源明确为 `Notarized Developer ID`。重打包后的最终 ZIP 会重新解压执行同样检查，通过后才原子替换本地原归档。`stapler` 的 68 网络查询错误最多重试三次，其他错误立即失败；系统仍拒绝时保留诊断并停止。这里的 CDHash 对照不单独证明票据真实性，必须先通过原生 stapler 校验；也不代替各架构的真实系统验收。
+
 ## 一、加入 Apple Developer Program
 
 用 Apple ID 在 [developer.apple.com/programs/enroll](https://developer.apple.com/programs/enroll/) 或 Apple Developer App 里以**个人**身份注册，年费 99 美元（中国大陆 688 元）。Apple ID 需要开启双重认证。审核通过后会收到邮件。
@@ -65,9 +67,21 @@ A 和 B 填一组就行，两组都填时用 A。
 
 在 CHANGELOG.md 最上面加一节新版本推到 main，或者在 Actions 页面手动运行 release。日志里：
 
+已公开的发行不替换：完整发行核验后跳过，缺件或摘要不一致时发布新的补丁版本。`overwrite` 仅适用于已有标签的草稿；失败的草稿可在原标签提交上恢复，全部附件和校验和核对后才公开。原公开版本的 notes、latest 和资产保持不变。
+
 - 「导入签名证书」会显示证书名字，应该是 `Developer ID Application: …`；
 - 「检查签名」会列出每个包的版本和签名者；
 - 「提交苹果公证并钉上票据」通常几分钟，最后 `spctl` 显示 `source=Notarized Developer ID` 就成功了；没通过时会打印苹果给的公证日志，里面写着是哪个文件、什么原因。
+
+## 发版前的更新端到端验证
+
+使用 Frit 0.3.0 或更新版本时，App 的可复用工作流调用增加 `update-e2e-command: scripts/update-e2e.sh`，命令由 App 仓库提供。Frit 在签名、公证并生成校验和后、打标签发布前运行它；非零退出状态直接阻断发布。命令也会在 dry-run 中运行。
+
+命令可读取 `ARCHIVE_DIR`（最终归档目录）、`VERSION`（不含 v 的版本）、`SHA256SUMS_FILE`（完整校验和路径）和 `FRIT_RELEASE`（本次选用的发布脚本目录）。建议脚本先下载最新正式版，核对下载校验和及 Team ID，使用临时安装位置启动旧版，再将更新源指向本次构建，验证新进程启动和版本。
+
+需要 9.9.9 假更新源时，先在临时目录解压最终归档，调用 `"$FRIT_RELEASE/fake-release.sh" 临时目录/App.app App.zip`。这个脚本会复制 App、保留权限声明、修改副本版本，并使用工作流已导入的 `CODESIGN_IDENTITY` 和 `CODESIGN_KEYCHAIN` 重新签名；内部程序保持原签名，不会被统一重签。未提供签名身份时使用 ad-hoc 签名，仅适合流程测试。它以本地 HTTP 服务器提供 `latest.json`、`releases.json`、安装包和校验和。将其输出的 `FAKE_RELEASE_URL` 传给 App 的测试更新源配置，结束后停止 `FAKE_RELEASE_PID` 并清理测试安装。Proxi 的「旧正式版 → 9.9.9」测试可作为调用方实现参考。
+
+`fake-release.sh` 修改了 App，因此假更新包不保留原构建的公证票据。调用方应在临时测试安装中验证签名身份和更新流程，正式附件仍使用 `ARCHIVE_DIR` 中未经修改的归档。
 
 ## 要知道的几件事
 

@@ -12,23 +12,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 通过可复用工作流运行：推到 main 自动检查，版本标签会等待包含此矩阵的完整 CI。
+  downstream:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/downstream.yml
+    with:
+      frit-sha: ${{ github.sha }}
+
   linux:
     name: FritCore 测试、脚本检查（Linux）
     runs-on: ubuntu-latest
     container: swift:6.0-noble
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: 安装附件测试依赖
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3
       - name: 单元测试
         run: swift test
+      - name: 语言资源检查
+        run: python3 scripts/generate-localizations.py --check
       - name: 发布逻辑与附件清单测试
         run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: changelog.sh 测试
         run: Tests/release/test-changelog.sh
+      - name: 更新验证入口测试
+        run: Tests/release/test-update-e2e.sh
+      - name: 签名团队与公证凭据逻辑测试
+        run: |
+          Tests/release/test-signature.sh
+          Tests/release/test-notary-credentials.sh
       - name: Frit 版本标签测试
         run: Tests/release/test-tag-version.sh
       - name: 公证超时与重试逻辑测试
@@ -43,28 +59,72 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: shellcheck
-        run: shellcheck -x scripts/release/*.sh Tests/release/*.sh
+        run: shellcheck -x scripts/release/*.sh scripts/ci/*.sh Tests/release/*.sh
       - name: actionlint
         run: |
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
-          ./actionlint -color
+          scripts/ci/install-actionlint.sh "$RUNNER_TEMP"
+          "$RUNNER_TEMP/actionlint" -color
 
   macos:
     name: 单元测试、发布脚本自测（macOS）
     runs-on: macos-15
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: 选择最新的 Xcode
         run: scripts/release/select-xcode.sh
       - name: 单元测试
         run: swift test
+      - name: 原生日志突发测量（含系统日志成本）
+        run: |
+          mkdir -p "$RUNNER_TEMP/frit-filelog"
+          swiftc -O Sources/FritSystem/FileLog.swift Sources/FritSystem/FileLogBuffer.swift \
+            scripts/filelog-burst-probe.swift -o "$RUNNER_TEMP/frit-filelog/probe"
+          git rev-parse HEAD > "$RUNNER_TEMP/frit-filelog/source.txt"
+          sw_vers > "$RUNNER_TEMP/frit-filelog/system.txt"
+          swift --version > "$RUNNER_TEMP/frit-filelog/swift.txt"
+          for count in 1000 10000; do
+            /usr/bin/time -l "$RUNNER_TEMP/frit-filelog/probe" "$count" \
+              > "$RUNNER_TEMP/frit-filelog/burst-$count.json" \
+              2> "$RUNNER_TEMP/frit-filelog/time-$count.txt"
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: frit-filelog-burst
+          path: |
+            ${{ runner.temp }}/frit-filelog/*.json
+            ${{ runner.temp }}/frit-filelog/*.txt
+          if-no-files-found: ignore
+      - name: 更新组件 Sample 编译
+        run: bash Examples/UpdateSample/make-app.sh
+      - name: Sample 实际更新与启动回滚
+        timeout-minutes: 5
+        run: |
+          result="$RUNNER_TEMP/frit-update.passed"
+          rm -f "$result"
+          FRIT_UPDATE_RESULT="$result" bash Tests/release/test-update.sh
+          test "$(cat "$result")" = passed
       - name: 发布逻辑与附件清单测试
         run: python3 -m unittest discover -s Tests/release -p 'test_*.py'
       - name: 发布脚本自测
         run: Tests/release/test-scripts.sh
+      - name: 编译 iOS 17 支持的 FritCore
+        run: >-
+          xcodebuild -scheme FritCore -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/frit-ios" CODE_SIGNING_ALLOWED=NO build
+      - name: 编译 iOS 17 的协调文件层
+        run: >-
+          xcodebuild -scheme FritSync -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/frit-sync-ios" CODE_SIGNING_ALLOWED=NO build
+      - name: 更新验证入口测试（macOS 自带的 bash 3.2）
+        run: Tests/release/test-update-e2e.sh
+      - name: 签名团队与公证凭据测试
+        run: |
+          Tests/release/test-signature.sh
+          Tests/release/test-notary-credentials.sh
       - name: Frit 版本标签测试（macOS 自带的 bash 3.2）
         run: Tests/release/test-tag-version.sh
       - name: 公证超时与重试逻辑测试（macOS 自带的 bash 3.2）
@@ -73,6 +133,72 @@ jobs:
         run: Tests/release/test-publish.sh
       - name: Frit 版本标签的 CI 门槛测试
         run: Tests/release/test-tag-ci.sh
+
+  ui:
+    name: 公共 UI（${{ matrix.os }} / ${{ matrix.xcode }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            xcode: '16.4'
+          - os: macos-26
+            xcode: latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 选择 Xcode 16.4
+        if: matrix.xcode == '16.4'
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app
+      - name: 选择最新 Xcode
+        if: matrix.xcode == 'latest'
+        run: scripts/release/select-xcode.sh
+      - name: 原生面板、编辑与玻璃渲染
+        env:
+          FRIT_UI_EVIDENCE: ${{ runner.temp }}/frit-ui
+        run: |
+          xcodebuild -version
+          swift test --filter 'PanelTests|GlassTests|CloudFileTests'
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: frit-ui-${{ matrix.os }}
+          path: ${{ runner.temp }}/frit-ui
+          if-no-files-found: ignore
+
+  notarized-archive:
+    name: 公开归档只读验收（${{ matrix.os }}）
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15-intel]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 下载固定已公开归档并核对摘要
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/notarized-probe"
+          cd "$RUNNER_TEMP/notarized-probe"
+          gh release download v0.12.14 --repo whrss9527/meno --pattern Meno.zip --pattern SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS.txt
+          echo 'dc642a0c4a155ed78746f5ed18dac378dc73822d893e5341771f4bfa37f5e65e  Meno.zip' | shasum -a 256 -c -
+          ditto -x -k Meno.zip extracted
+      - name: 原生签名、票据覆盖和 Gatekeeper
+        run: |
+          app="$RUNNER_TEMP/notarized-probe/extracted/Meno.app"
+          xattr -w com.apple.quarantine '0081;00000000;FritCI;' "$app"
+          source scripts/release/notary-validation.sh
+          verify_notarized_app "$app" "$RUNNER_TEMP/notarized-probe/evidence"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: notarized-archive-${{ matrix.os }}
+          path: ${{ runner.temp }}/notarized-probe/evidence
+          if-no-files-found: ignore
 
   release-dry-run:
     name: 发布流程试运行
@@ -91,5 +217,22 @@ jobs:
       extra-assets: dist/plugins.json
       asset-aliases: dist/Sample-macos.zip=dist/LegacySample-macos.zip
       test-command: ""
+      update-e2e-command: 'test -n "$VERSION" && test -s "$ARCHIVE_DIR/SHA256SUMS.txt" && test -s "$SHA256SUMS_FILE"'
       frit-ref: ${{ github.sha }}
       dry-run: true
+      require-notarization: false
+
+  release-dry-run-output:
+    name: 试运行不输出已发布标签
+    needs: release-dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 检查可复用工作流的真实输出
+        env:
+          PUBLISHED_TAG: ${{ needs.release-dry-run.outputs.tag }}
+        run: |
+          if [ -n "$PUBLISHED_TAG" ]; then
+            echo "::error::试运行不应输出已发布标签：$PUBLISHED_TAG"
+            exit 1
+          fi
