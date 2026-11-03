@@ -70,7 +70,8 @@ for arch in arm64 x86_64; do
     [ "$archs" = "$arch" ] || { echo "$zip 里的 $bin 是 ${archs}，应该只有 ${arch}"; exit 1; }
   done
   codesign --verify --deep --strict "$work/thin/Sample.app"
-  codesign -dvv "$work/thin/Sample.app" 2>&1 | grep -q "Authority=Frit CI Test" || { echo "$zip 没有用证书重新签名"; exit 1; }
+  # 验签输出要读完，避免 grep 提前退出让 codesign 收到 SIGPIPE。
+  codesign -dvv "$work/thin/Sample.app" 2>&1 | grep "Authority=Frit CI Test" >/dev/null || { echo "$zip 没有用证书重新签名"; exit 1; }
   codesign -d --entitlements - "$work/thin/Sample.app" 2>/dev/null | grep -q "automation.apple-events" || { echo "$zip 的权限声明丢了"; exit 1; }
 done
 [ ! -e "$work/dist/Sample-thin-arm64" ] || { echo "临时文件夹没有清理"; exit 1; }
@@ -200,7 +201,7 @@ rm -rf "$work/fake-unzipped" && ditto -x -k "$work/downloaded.zip" "$work/fake-u
   || { echo "假发布里的版本不是 9.9.9"; exit 1; }
 codesign --verify --deep --strict "$work/fake-unzipped/Sample.app"
 for code in "$work/fake-unzipped/Sample.app" "$work/fake-unzipped/Sample.app/Contents/MacOS/sample-helper"; do
-  codesign -dvv "$code" 2>&1 | grep -q "Authority=Frit CI Test" || { echo "假发布丢失了证书签名"; exit 1; }
+  codesign -dvv "$code" 2>&1 | grep "Authority=Frit CI Test" >/dev/null || { echo "假发布丢失了证书签名"; exit 1; }
 done
 codesign -d --entitlements - "$work/fake-unzipped/Sample.app" 2>/dev/null | grep -q "automation.apple-events" \
   || { echo "假发布丢失了 App 权限声明"; exit 1; }
