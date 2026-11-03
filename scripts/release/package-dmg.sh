@@ -25,8 +25,18 @@ version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/
 touch "$work/contents/.metadata_never_index"
 xcrun swift "$scripts/dmg-background.swift" "$work/contents/.background/background.png" "$work/contents/Applications"
 size="$(( $(du -sk "$work/contents" | awk '{print $1}') + 32768 ))k"
-hdiutil create -ov -volname "${name} ${version}" -fs HFS+ -format UDRW \
-  -size "$size" -srcfolder "$work/contents" "$work/layout.dmg"
+for attempt in 1 2 3; do
+  if LC_ALL=C hdiutil create -ov -volname "${name} ${version}" -fs HFS+ -format UDRW \
+    -size "$size" -srcfolder "$work/contents" "$work/layout.dmg" > "$work/create.log" 2>&1; then
+    cat "$work/create.log"
+    break
+  else
+    result=$?
+  fi
+  cat "$work/create.log"
+  if ! grep -q 'Resource busy' "$work/create.log" || [ "$attempt" -eq 3 ]; then exit "$result"; fi
+  sleep 2
+done
 mounted="$work/volume"
 hdiutil attach "$work/layout.dmg" -mountpoint "$mounted" -nobrowse -noautoopen
 
