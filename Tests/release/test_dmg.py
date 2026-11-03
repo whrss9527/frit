@@ -62,9 +62,10 @@ class DMGTests(unittest.TestCase):
                 bundle.writestr('Sample.app/Contents/MacOS/Sample', b'fixture')
                 bundle.writestr('Sample.app/Contents/CodeResources', bytes.fromhex('0' * 39 + '1'))
             calls = root / 'calls'
+            calls.write_text('')
             env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'],
                        RUNNER_TEMP=str(root), FAKE_ZIP=str(archive), FAKE_CALLS=str(calls),
-                       NOTARY_KEY_P8='fixture', NOTARY_KEY_ID='fixture', SPCTL_TRIES='1',
+                       NOTARY_KEY_P8='Zml4dHVyZQ==', NOTARY_KEY_ID='fixture', SPCTL_TRIES='1',
                        NOTARY_APPLE_ID='', CODESIGN_NAME='')
             env.update(overrides)
             command = [str(RELEASE / ('notarize.sh' if notarize else 'verify-dmg.sh')), str(image)]
