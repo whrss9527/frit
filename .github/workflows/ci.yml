@@ -216,6 +216,7 @@ jobs:
       archives: dist/Sample-macos.zip dist/Sample-macos-arm64.zip dist/Sample-macos-x86_64.zip
       extra-assets: dist/plugins.json
       asset-aliases: dist/Sample-macos.zip=dist/LegacySample-macos.zip
+      dmg-archive: dist/Sample-macos.zip
       test-command: ""
       update-e2e-command: 'test -n "$VERSION" && test -s "$ARCHIVE_DIR/SHA256SUMS.txt" && test -s "$SHA256SUMS_FILE"'
       frit-ref: ${{ github.sha }}

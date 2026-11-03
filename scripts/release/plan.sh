@@ -37,6 +37,7 @@ else
   tagged="$(remote_tag_commit "$TAG")"
   if [ -n "$tagged" ]; then
     expected="${ARCHIVES:-} ${EXTRA_ASSETS:-}"
+    if [ -n "${DMG_ARCHIVE:-}" ]; then expected="$expected ${DMG_ARCHIVE%.zip}.dmg"; fi
     for mapping in ${ASSET_ALIASES:-}; do
       expected="$expected ${mapping#*=}"
     done

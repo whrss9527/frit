@@ -349,6 +349,23 @@ class ReleaseIntegrityTests(unittest.TestCase):
         self.assertNotEqual(self.run_script('plan.sh').returncode, 0)
         self.assert_no_mutation(before)
 
+    def test_dmg_is_required_and_included_in_checksums_and_public_inventory(self):
+        image = self.app / 'dist/App.dmg'
+        result = self.run_script('assets.sh', DMG_ARCHIVE='dist/App.zip')
+        self.assertNotEqual(result.returncode, 0)
+        image.write_bytes(b'dmg fixture')
+        result = self.run_script('assets.sh', DMG_ARCHIVE='dist/App.zip')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('App.dmg', (self.app / 'dist/SHA256SUMS.txt').read_text())
+        result = self.run_script(DMG_ARCHIVE='dist/App.zip', RELEASE_ASSETS='dist/App.zip dist/plugins.json dist/App.dmg')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('App.dmg', self.load()['assets'])
+        state = self.load(); state['calls'] = []; self.save(state)
+        before = self.load()
+        result = self.run_script('plan.sh', DMG_ARCHIVE='dist/App.zip')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assert_no_mutation(before)
+
     def test_plan_complete_is_read_only(self):
         self.seed(); before = self.load()
         result = self.run_script('plan.sh')

@@ -50,6 +50,10 @@ on:
         description: "只上传并计算校验和的额外附件，空格分隔，与 archives 在同一目录；签名公证由调用方负责"
         type: string
         default: ""
+      dmg-archive:
+        description: "用于制作拖拽安装 DMG 的 ZIP，必须在 archives 中；留空时不生成 DMG"
+        type: string
+        default: ""
       asset-aliases:
         description: "公证后复制的 zip 别名，空格分隔的 源归档=目标路径；均在归档目录，目标必须不存在"
         type: string
@@ -164,6 +168,7 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
           ARCHIVES: ${{ inputs.archives }}
+          DMG_ARCHIVE: ${{ inputs.dmg-archive }}
           EXTRA_ASSETS: ${{ inputs.extra-assets }}
           ASSET_ALIASES: ${{ inputs.asset-aliases }}
           OVERWRITE: ${{ inputs.overwrite }}
@@ -190,6 +195,7 @@ jobs:
       TAG: ${{ needs.plan.outputs.tag }}
       APP_NAME: ${{ inputs.app-name }}
       ARCHIVES: ${{ inputs.archives }}
+      DMG_ARCHIVE: ${{ inputs.dmg-archive }}
       EXTRA_ASSETS: ${{ inputs.extra-assets }}
       ASSET_ALIASES: ${{ inputs.asset-aliases }}
     steps:
@@ -273,6 +279,24 @@ jobs:
             exit 1
           fi
           echo "已签名并通过公证"
+      - name: 制作拖拽安装包
+        if: inputs.dmg-archive != ''
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+        run: |
+          found=false
+          for archive in $ARCHIVES; do
+            if [ "$archive" = "$DMG_ARCHIVE" ]; then found=true; fi
+          done
+          [ "$found" = true ] && [[ "$DMG_ARCHIVE" == *.zip ]] || { echo "::error::DMG 来源必须是 archives 中的 ZIP"; exit 1; }
+          image="${DMG_ARCHIVE%.zip}.dmg"
+          .frit/scripts/release/package-dmg.sh "$DMG_ARCHIVE" "$image"
+          if [ "${NOTARIZED:-}" = 1 ]; then .frit/scripts/release/notarize.sh "$image"; fi
       - name: 别名、附件清单与校验和
         id: assets
         run: .frit/scripts/release/assets.sh

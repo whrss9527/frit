@@ -22,6 +22,11 @@ archives = paths(os.environ.get('ARCHIVES', ''))
 extras = paths(os.environ.get('EXTRA_ASSETS', ''))
 if not archives:
     fail('archives 不能为空')
+dmg_archive = os.environ.get('DMG_ARCHIVE', '')
+if dmg_archive:
+    if dmg_archive not in archives or not dmg_archive.endswith('.zip'):
+        fail('DMG 来源必须是 archives 中的 ZIP')
+    extras.append(dmg_archive[:-4] + '.dmg')
 items = archives + extras
 root = Path(archives[0]).resolve().parent
 seen = set()

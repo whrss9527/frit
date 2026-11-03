@@ -1,5 +1,6 @@
 #!/bin/bash
 # 把签好名的 zip 提交苹果公证，通过后把公证票据钉（staple）到 .app 上，再重新打成同名的 zip。
+# DMG 直接钉票据并验证内部 App 与对应 ZIP 一致。
 # 钉上票据后，用户第一次打开时就算没联网，系统也能确认它经过了公证。
 #   scripts/release/notarize.sh dist/Foo.zip dist/Foo-arm64.zip …
 # 每个 zip 的最外层要有且只有一个 .app（ditto -c -k --keepParent Foo.app Foo.zip 打出来的就是）。
@@ -14,7 +15,7 @@ set -euo pipefail
 . "$(dirname "$0")/notary-validation.sh"
 umask 077
 
-[ $# -gt 0 ] || { echo "用法：notarize.sh 文件.zip …"; exit 1; }
+[ $# -gt 0 ] || { echo "用法：notarize.sh 文件.zip或.dmg …"; exit 1; }
 tries="${SPCTL_TRIES:-6}"
 interval="${SPCTL_INTERVAL:-10}"
 [[ "$tries" =~ ^[1-9][0-9]*$ ]] || { echo "SPCTL_TRIES 必须是正整数"; exit 1; }
@@ -68,12 +69,12 @@ json_field() {
 
 # 先把所有包都传上去（苹果那边同时处理），再逐个等结果。
 ids=()
-for zip in "$@"; do
-  [ -f "$zip" ] || { echo "找不到 $zip"; exit 1; }
-  name="$(basename "$zip")"
+for archive in "$@"; do
+  [ -f "$archive" ] || { echo "找不到 $archive"; exit 1; }
+  name="$(basename "$archive")"
   out="$work/submit-$name.json"
   echo "上传 $name 提交公证"
-  if ! xcrun notarytool submit "$zip" "${auth[@]}" --output-format json > "$out"; then
+  if ! xcrun notarytool submit "$archive" "${auth[@]}" --output-format json > "$out"; then
     cat "$out" || true
     echo "提交失败：$name"
     exit 1
@@ -85,10 +86,10 @@ for zip in "$@"; do
 done
 
 i=0
-for zip in "$@"; do
+for archive in "$@"; do
   id="${ids[$i]}"
   i=$((i + 1))
-  name="$(basename "$zip")"
+  name="$(basename "$archive")"
   out="$work/wait-$name.json"
   timeout="${NOTARY_TIMEOUT:-45m}"
   wait_result=0
@@ -107,10 +108,16 @@ for zip in "$@"; do
     xcrun notarytool log "$id" "${auth[@]}" || true
     exit 1
   fi
+  if [[ "$archive" == *.dmg ]]; then
+    stapler_with_retry staple "$archive"
+    "$(dirname "$0")/verify-dmg.sh" "$archive" "${archive%.dmg}.zip"
+    echo "${name}：已钉上公证票据"
+    continue
+  fi
   # 解压、钉票据、确认系统认可，再压回原来的文件。
   dir="$work/staple-${name%.zip}"
   rm -rf "$dir" && mkdir -p "$dir"
-  ditto -x -k "$zip" "$dir"
+  ditto -x -k "$archive" "$dir"
   apps="$(find "$dir" -maxdepth 1 -name '*.app' -type d)"
   count="$(printf '%s\n' "$apps" | grep -c . || true)"
   [ "$count" = "1" ] || { echo "${name} 的最外层应该有且只有一个 .app（找到 ${count} 个）"; exit 1; }
@@ -121,7 +128,7 @@ for zip in "$@"; do
     xcrun notarytool log "$id" "${auth[@]}" || true
     exit 1
   fi
-  target="$(cd "$(dirname "$zip")" && pwd)/$name"
+  target="$(cd "$(dirname "$archive")" && pwd)/$name"
   # 同文件系统暂存，最终 ZIP 验收完成前不删除或覆盖原归档。
   archive_work="$(mktemp -d "$(dirname "$target")/.frit-notarized.XXXXXX")"
   pending="$archive_work/$name"

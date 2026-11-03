@@ -7,6 +7,8 @@ App 仓库调用 Frit 的 `release-app.yml` 发版。仓库的 Secrets 里有 De
 3. 把 zip 提交苹果公证，通过后把票据钉到 `.app` 上再重新打包（`scripts/release/notarize.sh`）；
 4. 算校验和、上传，Release 说明末尾注明「已用 Developer ID 签名并通过苹果公证」。
 
+需要拖拽安装时，调用方设置 `dmg-archive: dist/Foo.zip`，来源必须在 `archives` 中。流程从公证后的 ZIP 制作 `dist/Foo.dmg`，提供 App 与「应用程序」文件夹入口；DMG 单独签名、公证，并验证内部 App 与 ZIP 一致。两种附件都纳入校验和与完整性检查，应用内更新继续使用 ZIP。没有设置 `dmg-archive` 的调用方保持原来的附件清单。
+
 用户下载这样的包，解压后双击就能打开，不会再被 Gatekeeper 拦下。没有配置时照旧 ad-hoc 签名，发布日志里会有一条警告。
 
 下面是一次性的准备工作，大约半小时。**同一套证书和凭据要在每个 App 仓库里各填一遍**（个人账号没有组织级的 Secrets）。
