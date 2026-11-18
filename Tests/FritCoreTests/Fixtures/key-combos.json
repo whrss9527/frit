@@ -1,0 +1,6 @@
+{
+  "stox": {"keyCode": 1, "modifiers": 6144, "display": "⌃⌥S"},
+  "proxi": {"toggleHotkey": {"keyCode": 35, "modifiers": 6144, "display": "⌃⌥P"}},
+  "pop": {"pluginHotKeys": [{"pluginID": "search", "key": {"keyCode": 17, "modifiers": 2048}}]},
+  "meno": {"hotkeys": {"bindings": {"quickOpen": {"keyCode": 1, "modifiers": {"rawValue": 3}}}}}
+}

@@ -25,7 +25,7 @@ let package = Package(
             .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj"), .process("Resources/zh-Hant.lproj"),
         ]),
         .testTarget(name: "FritUITests", dependencies: ["FritUI"]),
-        .testTarget(name: "FritCoreTests", dependencies: ["FritCore"]),
+        .testTarget(name: "FritCoreTests", dependencies: ["FritCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "FritSystemTests", dependencies: ["FritSystem"], resources: [.copy("Fixtures")]),
         .testTarget(name: "FritSyncTests", dependencies: ["FritSync", "FritCore"]),
         .testTarget(name: "FritUpdateTests", dependencies: ["FritUpdate"]),

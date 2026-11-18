@@ -132,6 +132,8 @@ asset-aliases: dist/Proxi-macos.zip=dist/ProxySwitch-macos.zip
 
 最小系统模块的线程、日志和重启约定见 [docs/system.md](docs/system.md)。
 
+快捷键候选的旧设置格式和最低修饰键要求见 [docs/key-combo.md](docs/key-combo.md)；样本验收仍待确认，尚未随正式版提供。
+
 一键更新核心的配置、取消与安装语义见 [docs/update.md](docs/update.md)。
 
 更新视图、语言覆盖和可打开的 Sample.app 见 [docs/update-views.md](docs/update-views.md)。
